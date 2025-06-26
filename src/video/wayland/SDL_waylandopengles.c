@@ -163,7 +163,9 @@ int Wayland_GLES_SwapWindow(_THIS, SDL_Window *window)
 
             now = SDL_GetTicks();
             if (SDL_TICKS_PASSED(now, max_wait)) {
-                if (!WAYLAND_wl_display_cancel_read) {
+                /* If wl_display_prepare_read_queue is not called, we must not call wl_display_cancel_read().
+                   Doing so would decrement wl_display->reader_count to -1, causing a deadlock. */
+                if (!WAYLAND_wl_display_cancel_read || !WAYLAND_wl_display_prepare_read_queue || !data->gles_swap_frame_event_queue) {
                     break;
                 }
                 /* Timeout expired. Cancel the read. */
@@ -172,7 +174,9 @@ int Wayland_GLES_SwapWindow(_THIS, SDL_Window *window)
             }
 
             if (SDL_IOReady(WAYLAND_wl_display_get_fd(display), SDL_IOR_READ, max_wait - now) <= 0) {
-                if (!WAYLAND_wl_display_cancel_read) {
+                /* If wl_display_prepare_read_queue is not called, we must not call wl_display_cancel_read().
+                   Doing so would decrement wl_display->reader_count to -1, causing a deadlock. */
+                if (!WAYLAND_wl_display_cancel_read || !WAYLAND_wl_display_prepare_read_queue || !data->gles_swap_frame_event_queue) {
                     break;
                 }
                 /* Error or timeout expired without any events for us. Cancel the read. */
