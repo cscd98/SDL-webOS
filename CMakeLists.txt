@@ -518,6 +518,7 @@ endif()
 
 if(WEBOS)
   set_option(SDL_WEBOS_BROKEN_ABI "Build with webOS modified ABI" OFF)
+  set_option(SDL_WEBOS_HAVE_LIBHELPER "Enable use of libhelper for webOS" ON)
 endif()
 
 # General source files
@@ -1765,6 +1766,9 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
 
     if(SDL_WEBOS_BROKEN_ABI)
       set(HAVE_WEBOS_BROKEN_ABI 1)
+    endif()
+    if(SDL_WEBOS_HAVE_LIBHELPER)
+      add_definitions(-DSDL_WEBOS_HAVE_LIBHELPER=1)
     endif()
 
     if(NOT HAVE_WAYLAND)
