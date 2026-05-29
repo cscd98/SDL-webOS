@@ -17,6 +17,9 @@ char WaylandWebOS_GetCursorSize()
     jdomparser_ref parser = NULL;
     jvalue_ref parsed = NULL;
     char size = 'M';
+#ifndef SDL_WEBOS_HAVE_LIBHELPER
+    return 'M';
+#endif
     if (!SDL_webOSLunaServiceCallSync(uri, payload, 1, &response)) {
         return 'M';
     }

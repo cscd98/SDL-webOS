@@ -235,12 +235,14 @@ int SDL_InitSubSystem(Uint32 flags)
     }
     if (!SDL_WebOSInitCalled) {
         SDL_WebOSInitCalled = SDL_TRUE;
+#ifdef SDL_WEBOS_HAVE_LIBHELPER
         SDL_webOSInitLSHandle();
         if (!SDL_webOSAppRegistered()) {
             if (SDL_webOSRegisterApp() != 0) {
                 SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to register app: %s", SDL_GetError());
             }
         }
+#endif
     }
 #endif
 
@@ -543,7 +545,9 @@ void SDL_Quit(void)
     SDL_DBus_Quit();
 #endif
 #ifdef __WEBOS__
+#ifdef SDL_WEBOS_HAVE_LIBHELPER
     SDL_webOSUnregisterApp();
+#endif
     SDL_webOSUnloadLibraries();
 #endif
 
