@@ -65,4 +65,20 @@ extern void SDL_webOSUeventMonitorClose(SDL_webOSUeventMonitor *monitor);
  * valid only until the next call on the same monitor. */
 extern SDL_bool SDL_webOSUeventMonitorPoll(SDL_webOSUeventMonitor *monitor, SDL_webOSUevent *event);
 
+/* Reports whether the kernel dropped uevents because the socket buffer filled
+ * up, and clears the condition.
+ *
+ * Netlink is lossy under pressure: rather than blocking the sender, the kernel
+ * discards broadcasts and reports ENOBUFS once. The events are gone for good,
+ * so the device list can be wrong in a way no later event will correct -- a
+ * device removed during the gap simply never gets its remove.
+ *
+ * That matters here because a webOS app can be backgrounded or suspended, and
+ * a process that isn't draining the socket while controllers come and go is
+ * exactly how the buffer fills. Callers must treat a true return as "resync
+ * now" and redo the full scan they did at init. Ignoring it would leave the
+ * list permanently stale, which is worse than the polling it replaces, since
+ * polling recovers on its own within one interval. */
+extern SDL_bool SDL_webOSUeventMonitorLostEvents(SDL_webOSUeventMonitor *monitor);
+
 #endif /* SDL_webos_uevent_monitor_h_ */

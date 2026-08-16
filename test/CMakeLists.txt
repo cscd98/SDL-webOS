@@ -183,6 +183,17 @@ add_sdl_test_executable(testkeys testkeys.c)
 if(LINUX)
     add_sdl_test_executable(testwebosuevent testwebosuevent.c)
     add_sdl_test_executable(testwebosuevent_parse NONINTERACTIVE testwebosuevent_parse.c)
+
+    if(WEBOS)
+        # These compile internal sources in, so they have to agree with the
+        # library on SDL_DYNAMIC_API. SDL_dynapi.h keys that off __WEBOS__,
+        # which the library picks up from sdl-build-options and tests
+        # otherwise don't -- leaving the test calling SDL_*_REAL while the
+        # library defines the plain names. SDL_dynapi.h rejects setting
+        # SDL_DYNAMIC_API on the command line, so match the define instead.
+        target_compile_definitions(testwebosuevent PRIVATE __WEBOS__)
+        target_compile_definitions(testwebosuevent_parse PRIVATE __WEBOS__)
+    endif()
 endif()
 
 add_sdl_test_executable(testloadso testloadso.c)

@@ -21,6 +21,7 @@
 struct SDL_webOSUeventMonitor
 {
     int fd;
+    SDL_bool lost_events;
     char buf[UEVENT_BUF_SIZE];
 };
 
@@ -100,6 +101,19 @@ SDL_bool SDL_webOSUeventMonitorPoll(SDL_webOSUeventMonitor *monitor, SDL_webOSUe
             if (bytes < 0 && errno == EINTR) {
                 continue;
             }
+
+            if (bytes < 0 && errno == ENOBUFS) {
+                /* The kernel discarded broadcasts because our buffer was
+                 * full. Whatever it dropped is unrecoverable, so stop draining
+                 * and let the caller resync -- a rescan supersedes anything
+                 * still queued, and returning here avoids spinning if the
+                 * condition repeats. */
+                monitor->lost_events = SDL_TRUE;
+                SDL_LogWarn(SDL_LOG_CATEGORY_INPUT,
+                            "Dropped uevents (socket buffer overflow), device list needs a rescan");
+                return SDL_FALSE;
+            }
+
             /* EAGAIN/EWOULDBLOCK: drained, which is the usual way out. */
             return SDL_FALSE;
         }
@@ -120,6 +134,20 @@ SDL_bool SDL_webOSUeventMonitorPoll(SDL_webOSUeventMonitor *monitor, SDL_webOSUe
         /* Not an event we can describe; keep draining rather than making the
          * caller poll again for it. */
     }
+}
+
+SDL_bool SDL_webOSUeventMonitorLostEvents(SDL_webOSUeventMonitor *monitor)
+{
+    SDL_bool lost;
+
+    if (monitor == NULL) {
+        return SDL_FALSE;
+    }
+
+    lost = monitor->lost_events;
+    monitor->lost_events = SDL_FALSE;
+
+    return lost;
 }
 
 static int OpenUeventSocket(void)

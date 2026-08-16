@@ -85,6 +85,12 @@ typedef struct
      * far ahead netlink was. */
     Uint32 netlink_touched;
     Uint32 netlink_time[PRESENCE_MAX_INDEX];
+
+    /* How many transitions netlink reported per index since the last poll. A
+     * bitmask diff can express at most one, so anything above that is a
+     * change the poll structurally cannot recover -- a reconnect, or a whole
+     * connect/disconnect cycle, that happened entirely between two scans. */
+    Uint8 netlink_transitions[PRESENCE_MAX_INDEX];
 } NodeClass;
 
 static NodeClass node_classes[NODE_KIND_COUNT] = {
@@ -97,8 +103,9 @@ static NodeClass node_classes[NODE_KIND_COUNT] = {
 static int poll_changes = 0;         /* bitmask transitions the poll saw */
 static int poll_changes_missed = 0;  /* ... that netlink never reported */
 static int netlink_events = 0;       /* add/remove on a device node */
-static int netlink_invisible = 0;    /* ... that left the bitmask unchanged */
+static int netlink_invisible = 0;    /* ... the bitmask diff could not express */
 static int beyond_bitmask = 0;       /* nodes the 32-bit mask can't represent */
+static int netlink_overflows = 0;    /* times the kernel dropped queued uevents */
 static Uint32 latency_total = 0;     /* how far netlink led the poll, summed */
 static int latency_samples = 0;
 
@@ -214,9 +221,17 @@ static void HandleUevent(const SDL_webOSUevent *event)
     }
 
     cls->netlink_touched |= 1u << index;
+
+    if (cls->netlink_transitions[index] < 255) {
+        cls->netlink_transitions[index]++;
+    }
 }
 
-static void PollPresence(void)
+/* `announce` is false for the initial seeding scan, where every attached
+ * device shows up as a change against an empty bitmask. Counting or printing
+ * those would report the entire existing device list as arrivals that netlink
+ * failed to report. */
+static void PollPresence(SDL_bool announce)
 {
     int kind;
 
@@ -224,10 +239,9 @@ static void PollPresence(void)
         NodeClass *cls = &node_classes[kind];
         Uint32 flags = SDL_webOSGetDevicePresenceFlags(cls->check);
         Uint32 changed = flags ^ cls->poll_flags;
-        Uint32 unexplained;
         int index;
 
-        for (index = 0; index < PRESENCE_MAX_INDEX; index++) {
+        for (index = 0; announce && index < PRESENCE_MAX_INDEX; index++) {
             Uint32 bit = 1u << index;
 
             if (!(changed & bit)) {
@@ -249,21 +263,25 @@ static void PollPresence(void)
             }
         }
 
-        /* Netlink activity that left the bitmask untouched. A same-index
-         * disconnect/reconnect between two polls lands here, and it's exactly
-         * what the poll can never recover. */
-        unexplained = cls->netlink_touched & ~changed;
+        /* A bitmask diff carries at most one transition per index, so compare
+         * what netlink reported against what the diff could express. Anything
+         * over is lost for good: a same-index reconnect (2 transitions, 0
+         * expressible) or a full connect/disconnect cycle landing between two
+         * scans (3 transitions, 1 expressible). */
+        for (index = 0; announce && index < PRESENCE_MAX_INDEX; index++) {
+            int seen = cls->netlink_transitions[index];
+            int expressible = (changed & (1u << index)) ? 1 : 0;
 
-        for (index = 0; index < PRESENCE_MAX_INDEX; index++) {
-            if (unexplained & (1u << index)) {
-                netlink_invisible++;
-                Report("         %s/%d changed but the bitmask did not — invisible to polling",
-                       cls->label, index);
+            if (seen > expressible) {
+                netlink_invisible += seen - expressible;
+                Report("         %s/%d: netlink saw %d transition(s), the bitmask could express %d",
+                       cls->label, index, seen, expressible);
             }
         }
 
         cls->poll_flags = flags;
         cls->netlink_touched = 0;
+        SDL_memset(cls->netlink_transitions, 0, sizeof(cls->netlink_transitions));
     }
 }
 
@@ -275,8 +293,9 @@ static int PrintVerdict(SDL_bool monitor_opened)
     printf(" poll-observed changes           : %d\n", poll_changes);
     printf("   corroborated by netlink       : %d\n", poll_changes - poll_changes_missed);
     printf("   missed by netlink             : %d\n", poll_changes_missed);
-    printf(" changes only netlink saw        : %d\n", netlink_invisible);
+    printf(" transitions the poll cannot see  : %d\n", netlink_invisible);
     printf(" nodes beyond the 32-bit mask    : %d\n", beyond_bitmask);
+    printf(" socket overflows (events lost)  : %d\n", netlink_overflows);
 
     if (latency_samples > 0) {
         printf(" mean netlink lead over poll     : %ums over %d samples\n",
@@ -314,8 +333,8 @@ static int PrintVerdict(SDL_bool monitor_opened)
     printf("   Every change the poll detected was reported by netlink first.\n");
 
     if (netlink_invisible > 0) {
-        printf("   %d change(s) were visible only to netlink, which is the\n", netlink_invisible);
-        printf("   same-index reconnect case the bitmask cannot represent.\n");
+        printf("   netlink reported %d transition(s) more than the bitmask diff\n", netlink_invisible);
+        printf("   could express -- reconnects the poll structurally cannot see.\n");
     }
 
     printf("=========================================================\n");
@@ -370,15 +389,17 @@ int main(int argc, char *argv[])
      * already attached don't register as arrivals on the first tick. The real
      * backend has to bind the socket before this scan for the same reason:
      * anything appearing in the gap would otherwise go unnoticed. */
-    PollPresence();
-    poll_changes = 0;
-    poll_changes_missed = 0;
-    netlink_events = 0;
-    netlink_invisible = 0;
-    latency_total = 0;
-    latency_samples = 0;
+    PollPresence(SDL_FALSE);
 
     last_poll = SDL_GetTicks();
+
+    {
+        int kind;
+        for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
+            Report("already attached: %s %s", node_classes[kind].label,
+                   node_classes[kind].poll_flags ? "yes" : "none");
+        }
+    }
 
     Report("running for %us — plug and unplug a controller now (Ctrl-C to stop early)",
            duration_ms / 1000);
@@ -390,10 +411,19 @@ int main(int argc, char *argv[])
             while (SDL_webOSUeventMonitorPoll(monitor, &event)) {
                 HandleUevent(&event);
             }
+
+            /* An overflow means the device list can be stale in a way no
+             * later event corrects, so a backend has to resync here. Counted
+             * separately because it invalidates the comparison rather than
+             * being a netlink failure. */
+            if (SDL_webOSUeventMonitorLostEvents(monitor)) {
+                netlink_overflows++;
+                Report("netlink  *** dropped events (buffer overflow) — a backend must rescan here ***");
+            }
         }
 
         if (SDL_TICKS_PASSED(SDL_GetTicks(), last_poll + poll_interval_ms)) {
-            PollPresence();
+            PollPresence(SDL_TRUE);
             last_poll = SDL_GetTicks();
         }
 
@@ -402,7 +432,7 @@ int main(int argc, char *argv[])
 
     /* A final poll, so a change in the last interval still gets cross-checked
      * instead of being dropped on the floor at exit. */
-    PollPresence();
+    PollPresence(SDL_TRUE);
 
     SDL_webOSUeventMonitorClose(monitor);
     SDL_Quit();
