@@ -175,6 +175,16 @@ add_sdl_test_executable(testiconv NEEDS_RESOURCES testiconv.c testutils.c)
 add_sdl_test_executable(testime NEEDS_RESOURCES testime.c testutils.c)
 add_sdl_test_executable(testjoystick testjoystick.c)
 add_sdl_test_executable(testkeys testkeys.c)
+
+# Netlink uevent hotplug monitor. Not gated on WEBOS: the mechanism is plain
+# Linux netlink, and running it on a desktop with a USB controller is useful
+# well before it reaches a TV. testwebosuevent needs real hotplug activity to
+# conclude anything, so only the parser tests are non-interactive.
+if(LINUX)
+    add_sdl_test_executable(testwebosuevent testwebosuevent.c)
+    add_sdl_test_executable(testwebosuevent_parse NONINTERACTIVE testwebosuevent_parse.c)
+endif()
+
 add_sdl_test_executable(testloadso testloadso.c)
 add_sdl_test_executable(testlocale NONINTERACTIVE testlocale.c)
 add_sdl_test_executable(testlock testlock.c)
