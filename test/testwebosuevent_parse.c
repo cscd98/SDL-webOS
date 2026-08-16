@@ -31,6 +31,27 @@
 
 static int failures;
 
+/* ParseUevent now hands back the raw fields; the monitor turns those into a
+ * SDL_webOSUevent once it knows the node class it's watching. Reassemble one
+ * here so the cases below stay readable. */
+static SDL_bool Parse(char *buf, size_t len, SDL_webOSUevent *event)
+{
+    const char *subsystem = NULL;
+    const char *devname = NULL;
+    SDL_webOSUeventAction action;
+
+    SDL_zerop(event);
+
+    if (!ParseUevent(buf, len, &subsystem, &devname, &action)) {
+        return SDL_FALSE;
+    }
+
+    event->action = action;
+    event->devname = devname;
+
+    return SDL_TRUE;
+}
+
 /* Assembles the NUL-separated field list the kernel actually sends. */
 static size_t BuildUevent(char *buf, const char *const *fields, int count)
 {
@@ -80,9 +101,8 @@ int main(int argc, char *argv[])
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
         Check("evdev add -> event14",
-              ParseUevent(buf, len, &ev) &&
+              Parse(buf, len, &ev) &&
                   ev.action == SDL_WEBOS_UEVENT_ACTION_ADD &&
-                  SDL_strcmp(ev.subsystem, "input") == 0 &&
                   SDL_strcmp(ev.devname, "event14") == 0,
               ev.devname);
     }
@@ -98,7 +118,7 @@ int main(int argc, char *argv[])
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
         Check("remove without DEVNAME -> DEVPATH fallback",
-              ParseUevent(buf, len, &ev) &&
+              Parse(buf, len, &ev) &&
                   ev.action == SDL_WEBOS_UEVENT_ACTION_REMOVE &&
                   SDL_strcmp(ev.devname, "js7") == 0,
               ev.devname);
@@ -115,8 +135,7 @@ int main(int argc, char *argv[])
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
         Check("hidraw add -> hidraw0",
-              ParseUevent(buf, len, &ev) &&
-                  SDL_strcmp(ev.subsystem, "hidraw") == 0 &&
+              Parse(buf, len, &ev) &&
                   SDL_strcmp(ev.devname, "hidraw0") == 0,
               ev.devname);
     }
@@ -132,7 +151,7 @@ int main(int argc, char *argv[])
             "DEVNAME=input/event3",
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
-        Check("change action rejected", !ParseUevent(buf, len, &ev), "accepted");
+        Check("change action rejected", !Parse(buf, len, &ev), "accepted");
     }
 
     /* bind/unbind arrive for these same devices on modern kernels. */
@@ -143,14 +162,14 @@ int main(int argc, char *argv[])
             "SUBSYSTEM=input",
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
-        Check("bind action rejected", !ParseUevent(buf, len, &ev), "accepted");
+        Check("bind action rejected", !Parse(buf, len, &ev), "accepted");
     }
 
     /* A libudev-format message must not be read as a kernel one. */
     {
         SDL_memcpy(buf, "libudev\0", 8);
         SDL_memcpy(buf + 8, "ACTION=add\0", 11);
-        Check("libudev magic rejected", !ParseUevent(buf, 19, &ev), "accepted");
+        Check("libudev magic rejected", !Parse(buf, 19, &ev), "accepted");
     }
 
     {
@@ -160,7 +179,7 @@ int main(int argc, char *argv[])
             "DEVNAME=input/event3",
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
-        Check("missing ACTION rejected", !ParseUevent(buf, len, &ev), "accepted");
+        Check("missing ACTION rejected", !Parse(buf, len, &ev), "accepted");
     }
 
     /* Bus- and class-level events are valid but describe no node. There must
@@ -174,7 +193,7 @@ int main(int argc, char *argv[])
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
         Check("trailing-slash DEVPATH -> NULL devname",
-              ParseUevent(buf, len, &ev) && ev.devname == NULL,
+              Parse(buf, len, &ev) && ev.devname == NULL,
               ev.devname);
     }
 
@@ -190,7 +209,7 @@ int main(int argc, char *argv[])
         };
         len = BuildUevent(buf, fields, SDL_arraysize(fields));
         Check("event40 parsed (beyond bitmask range)",
-              ParseUevent(buf, len, &ev) && SDL_strcmp(ev.devname, "event40") == 0,
+              Parse(buf, len, &ev) && SDL_strcmp(ev.devname, "event40") == 0,
               ev.devname);
     }
 

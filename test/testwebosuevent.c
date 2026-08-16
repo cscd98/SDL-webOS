@@ -16,23 +16,20 @@
  * same hotplug activity, and reports whether netlink can replace the poll on
  * this device. No video, no window: it's meant to be run over SSH on a TV.
  *
- * The question it exists to answer is whether an unprivileged process can
- * receive kernel uevents on a given webOS version. That's confirmed on
- * webOS 10 (kernel 5.4) but not on the 3.10 kernels older versions ship, and
- * it's the one thing standing between the netlink monitor and dropping the
- * 3-second poll.
- *
- * Note that it can only answer the question if devices actually come and go
- * while it runs, which is why it reports INCONCLUSIVE rather than a pass when
- * nothing happened. Silence is not evidence that netlink works: an idle
- * system produces no uevents whether or not the socket is delivering them.
+ * It can only answer that if devices actually come and go while it runs,
+ * which is why it reports INCONCLUSIVE rather than a pass when nothing
+ * happened. Silence is not evidence that netlink works: an idle system
+ * produces no uevents whether or not the socket is delivering them.
  *
  * Usage:
- *   testwebosuevent [--duration SECONDS] [--poll-interval MS] [--verbose]
+ *   testwebosuevent [--duration SECONDS] [--poll-interval MS] [--sdl]
+ *
+ * --sdl reports SDL's own joystick device events instead, which checks the
+ * backend wiring rather than the monitor underneath it.
  *
  * Plug and unplug a controller (USB or Bluetooth) a few times while it runs.
- * Reconnecting the same controller repeatedly is the interesting case, since
- * that's what the presence bitmask can't see.
+ * Cycling one faster than the poll interval is the interesting case, since
+ * that's what the presence bitmask can't represent.
  *
  * Exit status: 0 netlink usable, 1 fallback required, 2 inconclusive.
  */
@@ -65,7 +62,6 @@
 
 typedef enum
 {
-    NODE_OTHER = -1,
     NODE_EVDEV = 0,
     NODE_JS,
     NODE_HIDRAW,
@@ -78,11 +74,14 @@ typedef struct
     const char *prefix;
     SDL_webOSDevicePresenceCheck check;
 
+    /* One monitor per class, which is how a backend uses this: netlink
+     * delivers a copy to every bound socket, so they don't compete. */
+    SDL_webOSUeventMonitor *monitor;
+
     Uint32 poll_flags;
 
-    /* Indices netlink reported on since the last poll tick, and when it first
-     * reported each, so we can tell what the poll would have missed and how
-     * far ahead netlink was. */
+    /* When netlink first reported each index since the last poll tick, so we
+     * can say how far ahead of the poll it was. */
     Uint32 netlink_touched;
     Uint32 netlink_time[PRESENCE_MAX_INDEX];
 
@@ -94,22 +93,20 @@ typedef struct
 } NodeClass;
 
 static NodeClass node_classes[NODE_KIND_COUNT] = {
-    { "evdev", "event", SDL_WEBOS_DEVICE_PRESENCE_CHECK_EVDEV, 0, 0, { 0 } },
-    { "js", "js", SDL_WEBOS_DEVICE_PRESENCE_CHECK_JS, 0, 0, { 0 } },
-    { "hidraw", "hidraw", SDL_WEBOS_DEVICE_PRESENCE_CHECK_HIDRAW, 0, 0, { 0 } },
+    { "evdev", "event", SDL_WEBOS_DEVICE_PRESENCE_CHECK_EVDEV, NULL, 0, 0, { 0 }, { 0 } },
+    { "js", "js", SDL_WEBOS_DEVICE_PRESENCE_CHECK_JS, NULL, 0, 0, { 0 }, { 0 } },
+    { "hidraw", "hidraw", SDL_WEBOS_DEVICE_PRESENCE_CHECK_HIDRAW, NULL, 0, 0, { 0 }, { 0 } },
 };
 
 /* Verdict inputs */
-static int poll_changes = 0;         /* bitmask transitions the poll saw */
-static int poll_changes_missed = 0;  /* ... that netlink never reported */
-static int netlink_events = 0;       /* add/remove on a device node */
-static int netlink_invisible = 0;    /* ... the bitmask diff could not express */
-static int beyond_bitmask = 0;       /* nodes the 32-bit mask can't represent */
-static int netlink_overflows = 0;    /* times the kernel dropped queued uevents */
-static Uint32 latency_total = 0;     /* how far netlink led the poll, summed */
+static int poll_changes = 0;        /* bitmask transitions the poll saw */
+static int poll_changes_missed = 0; /* ... that netlink never reported */
+static int netlink_events = 0;      /* add/remove on a device node */
+static int netlink_invisible = 0;   /* ... the bitmask diff could not express */
+static int beyond_bitmask = 0;      /* nodes the 32-bit mask can't represent */
+static Uint32 latency_total = 0;    /* how far netlink led the poll, summed */
 static int latency_samples = 0;
 
-static int verbose = 0;
 static volatile int keep_running = 1;
 static Uint32 start_time;
 
@@ -142,72 +139,34 @@ static void Report(const char *fmt, ...)
     fflush(stdout);
 }
 
-/* Splits "event14" into its class and index. Returns NODE_OTHER for anything
- * that isn't a numbered node we track, including "mice" and "mouse0". */
-static NodeKind ClassifyNode(const char *devname, int *index)
+/* The monitor only reports its own node class, so all that's left is pulling
+ * the index off the end of the name. */
+static int NodeIndex(const NodeClass *cls, const char *devname)
 {
-    int kind;
+    const char *suffix = devname + SDL_strlen(cls->prefix);
+    char *endptr = NULL;
+    long value = SDL_strtol(suffix, &endptr, 10);
 
-    if (devname == NULL) {
-        return NODE_OTHER;
+    if (endptr == NULL || *endptr != '\0' || value < 0) {
+        return -1;
     }
 
-    for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
-        const char *prefix = node_classes[kind].prefix;
-        size_t prefix_len = SDL_strlen(prefix);
-        const char *suffix;
-        char *endptr = NULL;
-        long value;
-
-        if (SDL_strncmp(devname, prefix, prefix_len) != 0) {
-            continue;
-        }
-
-        suffix = devname + prefix_len;
-
-        if (*suffix == '\0') {
-            continue;
-        }
-
-        value = SDL_strtol(suffix, &endptr, 10);
-
-        if (endptr == NULL || *endptr != '\0' || value < 0) {
-            continue;
-        }
-
-        /* "js" is a prefix of nothing else here, but "event" vs "mouse" and
-         * friends means we only get here on an exact prefix + digits match. */
-        *index = (int)value;
-        return (NodeKind)kind;
-    }
-
-    return NODE_OTHER;
+    return (int)value;
 }
 
-static void HandleUevent(const SDL_webOSUevent *event)
+static void HandleUevent(NodeKind kind, const SDL_webOSUevent *event)
 {
-    NodeKind kind;
-    NodeClass *cls;
-    int index = 0;
+    NodeClass *cls = &node_classes[kind];
+    int index = NodeIndex(cls, event->devname);
 
-    kind = ClassifyNode(event->devname, &index);
-
-    if (kind == NODE_OTHER) {
-        if (verbose) {
-            Report("netlink  %-6s %-8s %s (ignored)",
-                   event->action == SDL_WEBOS_UEVENT_ACTION_ADD ? "add" : "remove",
-                   event->subsystem ? event->subsystem : "-",
-                   event->devname ? event->devname : "-");
-        }
+    if (index < 0) {
         return;
     }
 
-    cls = &node_classes[kind];
     netlink_events++;
 
-    Report("netlink  %-6s %s/%d",
-           event->action == SDL_WEBOS_UEVENT_ACTION_ADD ? "add" : "remove",
-           cls->label, index);
+    Report("netlink  %-6s %s", event->action == SDL_WEBOS_UEVENT_ACTION_ADD ? "add" : "remove",
+           event->devnode);
 
     if (index >= PRESENCE_MAX_INDEX) {
         /* The poll cannot see this device at all, on any timescale. */
@@ -224,6 +183,24 @@ static void HandleUevent(const SDL_webOSUevent *event)
 
     if (cls->netlink_transitions[index] < 255) {
         cls->netlink_transitions[index]++;
+    }
+}
+
+/* Drains every monitor. `announce` is false while priming, where the monitors
+ * report everything already attached and there's nothing to compare against
+ * yet. */
+static void DrainMonitors(SDL_bool announce)
+{
+    int kind;
+
+    for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
+        SDL_webOSUevent event;
+
+        while (SDL_webOSUeventMonitorPoll(node_classes[kind].monitor, &event)) {
+            if (announce) {
+                HandleUevent((NodeKind)kind, &event);
+            }
+        }
     }
 }
 
@@ -285,7 +262,7 @@ static void PollPresence(SDL_bool announce)
     }
 }
 
-static int PrintVerdict(SDL_bool monitor_opened)
+static int PrintVerdict(SDL_bool monitors_opened)
 {
     printf("\n");
     printf("=========================================================\n");
@@ -293,9 +270,8 @@ static int PrintVerdict(SDL_bool monitor_opened)
     printf(" poll-observed changes           : %d\n", poll_changes);
     printf("   corroborated by netlink       : %d\n", poll_changes - poll_changes_missed);
     printf("   missed by netlink             : %d\n", poll_changes_missed);
-    printf(" transitions the poll cannot see  : %d\n", netlink_invisible);
+    printf(" transitions the poll cannot see : %d\n", netlink_invisible);
     printf(" nodes beyond the 32-bit mask    : %d\n", beyond_bitmask);
-    printf(" socket overflows (events lost)  : %d\n", netlink_overflows);
 
     if (latency_samples > 0) {
         printf(" mean netlink lead over poll     : %ums over %d samples\n",
@@ -304,7 +280,7 @@ static int PrintVerdict(SDL_bool monitor_opened)
 
     printf("---------------------------------------------------------\n");
 
-    if (!monitor_opened) {
+    if (!monitors_opened) {
         printf(" VERDICT: FALLBACK REQUIRED\n");
         printf("   The netlink socket could not be opened or bound, so this\n");
         printf("   webOS version must keep the presence poll.\n");
@@ -341,12 +317,56 @@ static int PrintVerdict(SDL_bool monitor_opened)
     return 0;
 }
 
+/* Exercises the joystick backend rather than the monitor: brings up
+ * SDL_INIT_JOYSTICK and reports the device events SDL itself produces. That's
+ * what an application sees, so it's the check that the backend is really
+ * wired to the uevent stream and not just that the stream works. */
+static int RunSdlMode(Uint32 duration_ms)
+{
+    if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) < 0) {
+        fprintf(stderr, "SDL_InitSubSystem(JOYSTICK) failed: %s\n", SDL_GetError());
+        return 3;
+    }
+
+    Report("SDL joystick subsystem up, %d joystick(s) already present", SDL_NumJoysticks());
+    Report("running for %us — plug and unplug a controller now", duration_ms / 1000);
+
+    while (keep_running && Elapsed() < duration_ms) {
+        SDL_Event event;
+
+        SDL_PumpEvents();
+
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+            case SDL_JOYDEVICEADDED:
+                Report("SDL_JOYDEVICEADDED    device index %d (%s)", event.jdevice.which,
+                       SDL_JoystickNameForIndex(event.jdevice.which));
+                break;
+            case SDL_JOYDEVICEREMOVED:
+                Report("SDL_JOYDEVICEREMOVED  instance id %d", event.jdevice.which);
+                break;
+            default:
+                break;
+            }
+        }
+
+        SDL_Delay(TICK_INTERVAL_MS);
+    }
+
+    Report("%d joystick(s) present at exit", SDL_NumJoysticks());
+    SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
-    SDL_webOSUeventMonitor *monitor;
+    SDL_bool monitors_opened = SDL_TRUE;
+    SDL_bool sdl_mode = SDL_FALSE;
     Uint32 duration_ms = 30000;
     Uint32 poll_interval_ms = 3000;
     Uint32 last_poll;
+    int kind;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -354,10 +374,10 @@ int main(int argc, char *argv[])
             duration_ms = (Uint32)SDL_atoi(argv[++i]) * 1000;
         } else if (SDL_strcmp(argv[i], "--poll-interval") == 0 && i + 1 < argc) {
             poll_interval_ms = (Uint32)SDL_atoi(argv[++i]);
-        } else if (SDL_strcmp(argv[i], "--verbose") == 0) {
-            verbose = 1;
+        } else if (SDL_strcmp(argv[i], "--sdl") == 0) {
+            sdl_mode = SDL_TRUE;
         } else {
-            fprintf(stderr, "Usage: %s [--duration SECONDS] [--poll-interval MS] [--verbose]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [--duration SECONDS] [--poll-interval MS] [--sdl]\n", argv[0]);
             return 3;
         }
     }
@@ -371,7 +391,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, OnSignal);
 
     /* No video, no joystick backend: this exercises the mechanism directly,
-     * so it stays meaningful before the backends are wired up to it. */
+     * the same way a backend would. */
     if (SDL_Init(0) < 0) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 3;
@@ -381,46 +401,41 @@ int main(int argc, char *argv[])
 
     start_time = SDL_GetTicks();
 
-    monitor = SDL_webOSUeventMonitorOpen();
+    if (sdl_mode) {
+        int result = RunSdlMode(duration_ms);
+        SDL_Quit();
+        return result;
+    }
 
-    Report("netlink monitor: %s", monitor ? "bound to the kernel uevent group" : "UNAVAILABLE");
+    for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
+        node_classes[kind].monitor = SDL_webOSUeventMonitorOpen(node_classes[kind].check);
 
-    /* Seed the poll state before announcing readiness, so devices that were
-     * already attached don't register as arrivals on the first tick. The real
-     * backend has to bind the socket before this scan for the same reason:
-     * anything appearing in the gap would otherwise go unnoticed. */
+        if (node_classes[kind].monitor == NULL) {
+            monitors_opened = SDL_FALSE;
+        }
+    }
+
+    Report("netlink monitors: %s",
+           monitors_opened ? "bound to the kernel uevent group" : "UNAVAILABLE");
+
+    /* The monitors report everything already attached as adds. Discard those
+     * and seed the poll to match, so the run starts from a common baseline
+     * and only real hotplug activity is compared. */
+    DrainMonitors(SDL_FALSE);
     PollPresence(SDL_FALSE);
 
     last_poll = SDL_GetTicks();
 
-    {
-        int kind;
-        for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
-            Report("already attached: %s %s", node_classes[kind].label,
-                   node_classes[kind].poll_flags ? "yes" : "none");
-        }
+    for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
+        Report("already attached: %s %s", node_classes[kind].label,
+               node_classes[kind].poll_flags ? "yes" : "none");
     }
 
     Report("running for %us — plug and unplug a controller now (Ctrl-C to stop early)",
            duration_ms / 1000);
 
     while (keep_running && Elapsed() < duration_ms) {
-        if (monitor != NULL) {
-            SDL_webOSUevent event;
-
-            while (SDL_webOSUeventMonitorPoll(monitor, &event)) {
-                HandleUevent(&event);
-            }
-
-            /* An overflow means the device list can be stale in a way no
-             * later event corrects, so a backend has to resync here. Counted
-             * separately because it invalidates the comparison rather than
-             * being a netlink failure. */
-            if (SDL_webOSUeventMonitorLostEvents(monitor)) {
-                netlink_overflows++;
-                Report("netlink  *** dropped events (buffer overflow) — a backend must rescan here ***");
-            }
-        }
+        DrainMonitors(SDL_TRUE);
 
         if (SDL_TICKS_PASSED(SDL_GetTicks(), last_poll + poll_interval_ms)) {
             PollPresence(SDL_TRUE);
@@ -430,12 +445,17 @@ int main(int argc, char *argv[])
         SDL_Delay(TICK_INTERVAL_MS);
     }
 
-    /* A final poll, so a change in the last interval still gets cross-checked
-     * instead of being dropped on the floor at exit. */
+    /* A final drain and poll, so a change in the last interval still gets
+     * cross-checked instead of being dropped on the floor at exit. */
+    DrainMonitors(SDL_TRUE);
     PollPresence(SDL_TRUE);
 
-    SDL_webOSUeventMonitorClose(monitor);
+    for (kind = 0; kind < NODE_KIND_COUNT; kind++) {
+        SDL_webOSUeventMonitorClose(node_classes[kind].monitor);
+        node_classes[kind].monitor = NULL;
+    }
+
     SDL_Quit();
 
-    return PrintVerdict(monitor != NULL);
+    return PrintVerdict(monitors_opened);
 }
