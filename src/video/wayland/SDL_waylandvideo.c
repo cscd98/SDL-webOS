@@ -966,6 +966,18 @@ static void handle_wl_output_mode(void *data, struct wl_output *output, uint32_t
         }
 
         internal->refresh = refresh;
+
+        /* Synthesize the done event that only exists from v2. This runs on
+         * webOS even though it advertises v2, because wl_proxy_get_version is
+         * missing there and the fallback reports 0, so the version cannot be
+         * determined. Without it the output is never finalized:
+         * placeholder.internal stays NULL, yet
+         * Wayland_FinalizeDisplays() still adds the display, and the first
+         * Wayland_GetDisplayBounds() dereferences it. The current mode is the
+         * last event of the burst, so finish from here. */
+        if (wl_output_get_version(output) < WL_OUTPUT_DONE_SINCE_VERSION) {
+            handle_wl_output_done(data, output);
+        }
     }
 }
 
