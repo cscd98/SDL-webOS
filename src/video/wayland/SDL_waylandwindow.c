@@ -2873,8 +2873,14 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
             data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_CUSTOM;
             data->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_SHOWN;
 
+            /* Wayland_ShowWindow() returns early for custom surfaces, so nothing
+             * else will clear this; leaving it set makes the video core skip
+             * presenting and the surface never receives a buffer. */
+            window->flags &= ~SDL_WINDOW_HIDDEN;
+
             data->shell_surface.webos.wl = wl_shell_get_shell_surface(c->shell.wl, data->surface);
             if (data->shell_surface.webos.wl) {
+                wl_shell_surface_set_class(data->shell_surface.webos.wl, data->app_id);
                 wl_shell_surface_set_toplevel(data->shell_surface.webos.wl);
             }
 
@@ -2886,13 +2892,16 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
                     if (appid) {
                         wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "appId", appid);
                     }
-                    wl_webos_shell_surface_set_state(data->shell_surface.webos.webos, WL_WEBOS_SHELL_SURFACE_STATE_FULLSCREEN);
+                    wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "_WEBOS_ACCESS_POLICY_FORCESTRETCH", "true");
+                    if (window->title) {
+                        wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "title", window->title);
+                    }
                 }
             }
 
-            /* The role only takes effect once the surface is committed. */
-            wl_surface_commit(data->surface);
-            WAYLAND_wl_display_flush(c->display);
+            /* Deliberately no set_state() and no bufferless commit here: the
+             * surface maps on its first buffer, and LSM is content with the
+             * role plus properties. */
         } // All other cases will be WAYLAND_SURFACE_UNKNOWN
     } else {
         // Roleless and external surfaces are always considered to be in the shown state by the backend.
