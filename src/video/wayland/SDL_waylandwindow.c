@@ -3462,8 +3462,14 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
 
         if (wind->gles_swap_frame_callback) {
             wl_callback_destroy(wind->gles_swap_frame_callback);
-            WAYLAND_wl_proxy_wrapper_destroy(wind->gles_swap_frame_surface_wrapper);
-            WAYLAND_wl_event_queue_destroy(wind->gles_swap_frame_event_queue);
+            /* Without proxy wrappers the callback framed the real surface, so
+             * there is no wrapper or private queue to tear down. */
+            if (wind->gles_swap_frame_surface_wrapper) {
+                WAYLAND_wl_proxy_wrapper_destroy(wind->gles_swap_frame_surface_wrapper);
+            }
+            if (wind->gles_swap_frame_event_queue) {
+                WAYLAND_wl_event_queue_destroy(wind->gles_swap_frame_event_queue);
+            }
         }
 
         if (!(window->flags & SDL_WINDOW_EXTERNAL)) {
