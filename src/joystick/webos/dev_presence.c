@@ -1,12 +1,25 @@
 #include "dev_presence.h"
 
 #include <dirent.h>
+#include <errno.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
-static SDL_bool is_char_device_present(dev_t devnum);
+typedef enum
+{
+    NODE_LIVENESS_UNKNOWN = -1,
+    NODE_LIVENESS_ABSENT = 0,
+    NODE_LIVENESS_PRESENT = 1
+} NodeLiveness;
+
+static NodeLiveness CheckSysDevChar(dev_t devnum);
+
+static NodeLiveness CheckSysClassInput(const char *name);
+
+static NodeLiveness CheckOpen(const char *devpath);
 
 static int is_hidraw(const struct dirent *dir);
 
@@ -63,6 +76,7 @@ Uint32 SDL_webOSGetDevicePresenceFlags(SDL_webOSDevicePresenceCheck check)
         int ret;
         int dev_num;
         char *endptr = NULL;
+        char dev_path[sizeof("/dev/input/") + NAME_MAX];
         ret = fstatat(dev_dir_fd, dev_list[dev_idx]->d_name, &dev_st, 0);
         if (ret != 0 || !S_ISCHR(dev_st.st_mode)) {
             free(dev_list[dev_idx]); /* SHOULD NOT be freed with SDL_free() */
@@ -73,7 +87,8 @@ Uint32 SDL_webOSGetDevicePresenceFlags(SDL_webOSDevicePresenceCheck check)
             free(dev_list[dev_idx]); /* SHOULD NOT be freed with SDL_free() */
             continue;
         }
-        if (is_char_device_present(dev_st.st_rdev)) {
+        snprintf(dev_path, sizeof(dev_path), "%s/%s", base_dir, dev_list[dev_idx]->d_name);
+        if (SDL_webOSIsCharDevicePresent(dev_st.st_rdev, dev_path, dev_list[dev_idx]->d_name)) {
             flags |= 1 << dev_num;
         }
         free(dev_list[dev_idx]); /* SHOULD NOT be freed with SDL_free() */
@@ -90,12 +105,87 @@ extern SDL_bool SDL_webOSIsDeviceIndexPresent(Uint32 flags, int index)
     return (flags & (1 << index)) != 0;
 }
 
-static SDL_bool is_char_device_present(dev_t devnum)
+SDL_bool SDL_webOSIsCharDevicePresent(dev_t devnum, const char *devpath, const char *name)
 {
-    char path[256];
+    NodeLiveness liveness = CheckSysDevChar(devnum);
+
+    if (liveness == NODE_LIVENESS_UNKNOWN) {
+        liveness = CheckSysClassInput(name);
+    }
+
+    if (liveness == NODE_LIVENESS_UNKNOWN) {
+        liveness = CheckOpen(devpath);
+    }
+
+    /* Nothing could answer. Treat the node as real rather than hide a device
+     * that is genuinely there: a false present costs one failed open in the
+     * caller, a false absent loses the device entirely. */
+    return liveness != NODE_LIVENESS_ABSENT;
+}
+
+/* Covers every device class, but the app jail mounts /sys/dev only in devmode
+ * (jail_native_devmode.conf); the production native and native_game jails have
+ * no /sys/dev at all. */
+static NodeLiveness CheckSysDevChar(dev_t devnum)
+{
+    char path[64];
     struct stat st;
-    snprintf(path, 256, "/sys/dev/char/%u:%u", major(devnum), minor(devnum));
-    return stat(path, &st) == 0;
+
+    if (stat("/sys/dev/char", &st) != 0) {
+        return NODE_LIVENESS_UNKNOWN;
+    }
+
+    snprintf(path, sizeof(path), "/sys/dev/char/%u:%u", major(devnum), minor(devnum));
+
+    return stat(path, &st) == 0 ? NODE_LIVENESS_PRESENT : NODE_LIVENESS_ABSENT;
+}
+
+/* Mounted in every jail config and lists only live nodes, but there is no
+ * /sys/class/hidraw to match it, so this answers for evdev and js only. */
+static NodeLiveness CheckSysClassInput(const char *name)
+{
+    char path[128];
+    struct stat st;
+
+    if (name == NULL || stat("/sys/class/input", &st) != 0) {
+        return NODE_LIVENESS_UNKNOWN;
+    }
+
+    snprintf(path, sizeof(path), "/sys/class/input/%s", name);
+
+    return stat(path, &st) == 0 ? NODE_LIVENESS_PRESENT : NODE_LIVENESS_ABSENT;
+}
+
+/* Last resort, and the only one that answers for hidraw in a production jail:
+ * an orphan node fails with ENODEV or ENXIO, where a live one either opens or
+ * refuses us for a reason that still proves something is behind it. */
+static NodeLiveness CheckOpen(const char *devpath)
+{
+    int fd;
+
+    if (devpath == NULL) {
+        return NODE_LIVENESS_UNKNOWN;
+    }
+
+    fd = open(devpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+
+    if (fd >= 0) {
+        close(fd);
+        return NODE_LIVENESS_PRESENT;
+    }
+
+    switch (errno) {
+    case ENODEV:
+    case ENXIO:
+    case ENOENT:
+        return NODE_LIVENESS_ABSENT;
+    case EACCES:
+    case EPERM:
+    case EBUSY:
+        return NODE_LIVENESS_PRESENT;
+    default:
+        return NODE_LIVENESS_UNKNOWN;
+    }
 }
 
 int is_hidraw(const struct dirent *dir)

@@ -285,6 +285,14 @@ static void Resynchronize(SDL_webOSUeventMonitor *monitor)
             continue;
         }
 
+        /* The inode alone proves nothing: webOS ships every node in this
+         * range from boot, live or not. Seeding a dead one into the known
+         * set would collapse the real add when a device finally appears on
+         * that index, and nothing would re-announce it. */
+        if (!SDL_webOSIsCharDevicePresent(st.st_rdev, path, entry->d_name)) {
+            continue;
+        }
+
         if (present_count == present_capacity) {
             int capacity = present_capacity ? present_capacity * 2 : 8;
             void *resized = SDL_realloc(present, (size_t)capacity * NODE_NAME_SIZE);
