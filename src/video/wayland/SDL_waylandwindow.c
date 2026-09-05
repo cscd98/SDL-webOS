@@ -736,7 +736,12 @@ static void gles_swap_frame_done(void *data, struct wl_callback *cb, uint32_t ti
     SDL_SetAtomicInt(&wind->swap_interval_ready, 1); // mark window as ready to present again.
 
     // reset this callback to fire again once a new frame was presented and compositor wants the next one.
-    wind->gles_swap_frame_callback = wl_surface_frame(wind->gles_swap_frame_surface_wrapper);
+    if (wind->gles_swap_frame_surface_wrapper) {
+        wind->gles_swap_frame_callback = wl_surface_frame(wind->gles_swap_frame_surface_wrapper);
+    } else {
+        // No proxy wrappers on this libwayland; the real surface was framed instead.
+        wind->gles_swap_frame_callback = wl_surface_frame(wind->surface);
+    }
     wl_callback_destroy(cb);
     wl_callback_add_listener(wind->gles_swap_frame_callback, &gles_swap_frame_listener, data);
 }
@@ -2689,10 +2694,16 @@ bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_W
 #endif
 
         if (!data->gles_swap_frame_event_queue) {
-            data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
-            data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
-            WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
-            data->gles_swap_frame_callback = wl_surface_frame(data->gles_swap_frame_surface_wrapper);
+            /* Proxy wrappers are libwayland 1.11+; webOS predates them, so frame
+             * the real surface instead of a queue-private wrapper. */
+            if (WAYLAND_wl_proxy_create_wrapper) {
+                data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
+                data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
+                WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
+                data->gles_swap_frame_callback = wl_surface_frame(data->gles_swap_frame_surface_wrapper);
+            } else {
+                data->gles_swap_frame_callback = wl_surface_frame(data->surface);
+            }
             wl_callback_add_listener(data->gles_swap_frame_callback, &gles_swap_frame_listener, data);
         }
 
@@ -2703,6 +2714,72 @@ bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_W
     }
 
     return false;
+}
+
+static void webos_shell_surface_state_changed(void *data, struct wl_webos_shell_surface *s, uint32_t state)
+{
+}
+
+static void webos_shell_surface_position_changed(void *data, struct wl_webos_shell_surface *s, int32_t x, int32_t y)
+{
+}
+
+static void webos_shell_surface_close(void *data, struct wl_webos_shell_surface *s)
+{
+    SDL_WindowData *wind = (SDL_WindowData *)data;
+
+    if (wind) {
+        SDL_SendWindowEvent(wind->sdlwindow, SDL_EVENT_WINDOW_CLOSE_REQUESTED, 0, 0);
+    }
+}
+
+static void webos_shell_surface_exposed(void *data, struct wl_webos_shell_surface *s, struct wl_array *rectangles)
+{
+}
+
+static void webos_shell_surface_state_about_to_change(void *data, struct wl_webos_shell_surface *s, uint32_t state)
+{
+}
+
+static const struct wl_webos_shell_surface_listener webos_shell_surface_listener = {
+    webos_shell_surface_state_changed,
+    webos_shell_surface_position_changed,
+    webos_shell_surface_close,
+    webos_shell_surface_exposed,
+    webos_shell_surface_state_about_to_change
+};
+
+/* webOS offers neither xdg-shell nor libdecor, so the role is assigned by hand.
+ * Order matters: SDL2 does this before creating the EGL window and flushes plus
+ * round-trips afterwards, so LSM has consumed the role and appId before the EGL
+ * stack touches the surface. */
+static void WebOS_AssignShellRole(SDL_VideoData *c, SDL_Window *window, SDL_WindowData *data)
+{
+    const char *appid = SDL_getenv("APPID");
+
+    data->shell_surface.webos.wl = wl_shell_get_shell_surface(c->shell.wl, data->surface);
+    if (data->shell_surface.webos.wl) {
+        wl_shell_surface_set_class(data->shell_surface.webos.wl, data->app_id);
+        wl_shell_surface_set_toplevel(data->shell_surface.webos.wl);
+    }
+
+    if (c->shell.webos) {
+        data->shell_surface.webos.webos = wl_webos_shell_get_shell_surface(c->shell.webos, data->surface);
+        if (data->shell_surface.webos.webos) {
+            wl_webos_shell_surface_add_listener(data->shell_surface.webos.webos, &webos_shell_surface_listener, data);
+            wl_webos_shell_surface_set_user_data(data->shell_surface.webos.webos, data);
+            if (appid) {
+                wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "appId", appid);
+            }
+            wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "_WEBOS_ACCESS_POLICY_FORCESTRETCH", "true");
+            if (window->title) {
+                wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "title", window->title);
+            }
+        }
+    }
+
+    WAYLAND_wl_display_flush(c->display);
+    WAYLAND_wl_display_roundtrip(c->display);
 }
 
 bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID create_props)
@@ -2823,10 +2900,14 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
      * window isn't visible.
      */
     if (window->flags & SDL_WINDOW_OPENGL) {
-        data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
-        data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
-        WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
-        data->gles_swap_frame_callback = wl_surface_frame(data->gles_swap_frame_surface_wrapper);
+        if (WAYLAND_wl_proxy_create_wrapper) {
+            data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
+            data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
+            WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
+            data->gles_swap_frame_callback = wl_surface_frame(data->gles_swap_frame_surface_wrapper);
+        } else {
+            data->gles_swap_frame_callback = wl_surface_frame(data->surface);
+        }
         wl_callback_add_listener(data->gles_swap_frame_callback, &gles_swap_frame_listener, data);
     }
 
@@ -2834,6 +2915,11 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
         if (_this->gl_config.alpha_size == 0) {
             _this->gl_config.alpha_size = 8;
         }
+    }
+
+    /* Assign the webOS shell role before EGL, matching SDL2's order. */
+    if (!custom_surface_role && !c->shell.xdg && c->shell.wl) {
+        WebOS_AssignShellRole(c, window, data);
     }
 
     if (create_egl_window) {
@@ -2867,41 +2953,10 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
                 data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL;
             }
         } else if (c->shell.wl) {
-            /* webOS has no xdg-shell, so take the roleless path -- the backend
-             * would otherwise wait forever on an xdg configure -- and assign the
-             * wl_shell role by hand. */
+            /* Role already assigned above; take the roleless path so the backend
+             * doesn't wait on an xdg configure that never arrives. */
             data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_CUSTOM;
             data->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_SHOWN;
-
-            /* Wayland_ShowWindow() returns early for custom surfaces, so nothing
-             * else will clear this; leaving it set makes the video core skip
-             * presenting and the surface never receives a buffer. */
-            window->flags &= ~SDL_WINDOW_HIDDEN;
-
-            data->shell_surface.webos.wl = wl_shell_get_shell_surface(c->shell.wl, data->surface);
-            if (data->shell_surface.webos.wl) {
-                wl_shell_surface_set_class(data->shell_surface.webos.wl, data->app_id);
-                wl_shell_surface_set_toplevel(data->shell_surface.webos.wl);
-            }
-
-            if (c->shell.webos) {
-                const char *appid = SDL_getenv("APPID");
-
-                data->shell_surface.webos.webos = wl_webos_shell_get_shell_surface(c->shell.webos, data->surface);
-                if (data->shell_surface.webos.webos) {
-                    if (appid) {
-                        wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "appId", appid);
-                    }
-                    wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "_WEBOS_ACCESS_POLICY_FORCESTRETCH", "true");
-                    if (window->title) {
-                        wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "title", window->title);
-                    }
-                }
-            }
-
-            /* Deliberately no set_state() and no bufferless commit here: the
-             * surface maps on its first buffer, and LSM is content with the
-             * role plus properties. */
         } // All other cases will be WAYLAND_SURFACE_UNKNOWN
     } else {
         // Roleless and external surfaces are always considered to be in the shown state by the backend.
