@@ -66,6 +66,11 @@ struct SDL_WindowData
 
             Uint32 serial;
         } xdg;
+        struct
+        {
+            struct wl_shell_surface *wl;
+            struct wl_webos_shell_surface *webos;
+        } webos;
     } shell_surface;
     enum
     {

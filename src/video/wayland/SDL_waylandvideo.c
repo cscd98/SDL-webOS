@@ -49,6 +49,7 @@
 
 #include "alpha-modifier-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
+#include "webos-shell-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "frog-color-management-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
@@ -1320,6 +1321,10 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
     } else if (SDL_strcmp(interface, "xdg_wm_base") == 0) {
         d->shell.xdg = wl_registry_bind(d->registry, id, &xdg_wm_base_interface, SDL_min(version, 7));
         xdg_wm_base_add_listener(d->shell.xdg, &_xdg_wm_base_listener, NULL);
+    } else if (SDL_strcmp(interface, "wl_shell") == 0) {
+        d->shell.wl = wl_registry_bind(d->registry, id, &wl_shell_interface, 1);
+    } else if (SDL_strcmp(interface, "wl_webos_shell") == 0) {
+        d->shell.webos = wl_registry_bind(d->registry, id, &wl_webos_shell_interface, SDL_min(version, 1));
     } else if (SDL_strcmp(interface, "wl_shm") == 0) {
         d->shm = wl_registry_bind(registry, id, &wl_shm_interface, SDL_min(SDL_WL_SHM_VERSION, version));
     } else if (SDL_strcmp(interface, "zwp_relative_pointer_manager_v1") == 0) {
@@ -1639,6 +1644,16 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
             wl_shm_destroy(data->shm);
         }
         data->shm = NULL;
+    }
+
+    if (data->shell.webos) {
+        wl_webos_shell_destroy(data->shell.webos);
+        data->shell.webos = NULL;
+    }
+
+    if (data->shell.wl) {
+        wl_shell_destroy(data->shell.wl);
+        data->shell.wl = NULL;
     }
 
     if (data->shell.xdg) {

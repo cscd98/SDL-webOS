@@ -47,6 +47,7 @@
 #include "xdg-dialog-v1-client-protocol.h"
 #include "frog-color-management-v1-client-protocol.h"
 #include "xdg-toplevel-icon-v1-client-protocol.h"
+#include "webos-shell-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
 
 #ifdef HAVE_LIBDECOR_H
@@ -2865,6 +2866,33 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
             } else {
                 data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL;
             }
+        } else if (c->shell.wl) {
+            /* webOS has no xdg-shell, so take the roleless path -- the backend
+             * would otherwise wait forever on an xdg configure -- and assign the
+             * wl_shell role by hand. */
+            data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_CUSTOM;
+            data->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_SHOWN;
+
+            data->shell_surface.webos.wl = wl_shell_get_shell_surface(c->shell.wl, data->surface);
+            if (data->shell_surface.webos.wl) {
+                wl_shell_surface_set_toplevel(data->shell_surface.webos.wl);
+            }
+
+            if (c->shell.webos) {
+                const char *appid = SDL_getenv("APPID");
+
+                data->shell_surface.webos.webos = wl_webos_shell_get_shell_surface(c->shell.webos, data->surface);
+                if (data->shell_surface.webos.webos) {
+                    if (appid) {
+                        wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "appId", appid);
+                    }
+                    wl_webos_shell_surface_set_state(data->shell_surface.webos.webos, WL_WEBOS_SHELL_SURFACE_STATE_FULLSCREEN);
+                }
+            }
+
+            /* The role only takes effect once the surface is committed. */
+            wl_surface_commit(data->surface);
+            WAYLAND_wl_display_flush(c->display);
         } // All other cases will be WAYLAND_SURFACE_UNKNOWN
     } else {
         // Roleless and external surfaces are always considered to be in the shown state by the backend.

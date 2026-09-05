@@ -57,6 +57,9 @@ struct SDL_VideoData
     struct
     {
         struct xdg_wm_base *xdg;
+        /* webOS offers neither xdg-shell nor libdecor; these are the only roles. */
+        struct wl_shell *wl;
+        struct wl_webos_shell *webos;
 #ifdef HAVE_LIBDECOR_H
         struct libdecor *libdecor;
 #endif
