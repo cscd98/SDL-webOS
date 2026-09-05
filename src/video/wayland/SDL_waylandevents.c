@@ -1503,7 +1503,6 @@ static const struct wl_touch_listener touch_listener = {
 };
 
 // Fallback for xkb_keymap_key_get_mods_for_level(), which is only available from 1.0.0, while the SDL minimum is 0.5.0.
-#if !SDL_XKBCOMMON_CHECK_VERSION(1, 0, 0)
 static size_t xkb_legacy_get_mods_for_level(SDL_WaylandSeat *seat, xkb_keycode_t key, xkb_layout_index_t layout, xkb_level_index_t level, xkb_mod_mask_t *masks_out, size_t masks_size)
 {
     if (!masks_out || !masks_size) {
@@ -1547,7 +1546,6 @@ static size_t xkb_legacy_get_mods_for_level(SDL_WaylandSeat *seat, xkb_keycode_t
 
     return mask_idx;
 }
-#endif
 
 static void Wayland_KeymapIterator(struct xkb_keymap *keymap, xkb_keycode_t key, void *data)
 {
@@ -1586,11 +1584,9 @@ static void Wayland_KeymapIterator(struct xkb_keymap *keymap, xkb_keycode_t key,
                 }
 
                 xkb_mod_mask_t xkb_mod_masks[16];
-#if SDL_XKBCOMMON_CHECK_VERSION(1, 0, 0)
-                const size_t num_masks = WAYLAND_xkb_keymap_key_get_mods_for_level(seat->keyboard.xkb.keymap, key, layout, level, xkb_mod_masks, SDL_arraysize(xkb_mod_masks));
-#else
-                const size_t num_masks = xkb_legacy_get_mods_for_level(seat, key, layout, level, xkb_mod_masks, SDL_arraysize(xkb_mod_masks));
-#endif
+                const size_t num_masks = WAYLAND_xkb_keymap_key_get_mods_for_level ?
+                    WAYLAND_xkb_keymap_key_get_mods_for_level(seat->keyboard.xkb.keymap, key, layout, level, xkb_mod_masks, SDL_arraysize(xkb_mod_masks)) :
+                    xkb_legacy_get_mods_for_level(seat, key, layout, level, xkb_mod_masks, SDL_arraysize(xkb_mod_masks));
                 for (size_t mask = 0; mask < num_masks; ++mask) {
                     // Ignore this modifier set if it uses unsupported modifier types.
                     if ((xkb_mod_masks[mask] | xkb_valid_mod_mask) != xkb_valid_mod_mask) {
@@ -1786,8 +1782,9 @@ static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
             WAYLAND_xkb_compose_table_unref(seat->keyboard.xkb.compose_table);
             seat->keyboard.xkb.compose_table = NULL;
         }
-        seat->keyboard.xkb.compose_table = WAYLAND_xkb_compose_table_new_from_locale(seat->display->xkb_context,
-                                                                                     locale, XKB_COMPOSE_COMPILE_NO_FLAGS);
+        seat->keyboard.xkb.compose_table = WAYLAND_xkb_compose_table_new_from_locale ?
+                                           WAYLAND_xkb_compose_table_new_from_locale(seat->display->xkb_context,
+                                                                                     locale, XKB_COMPOSE_COMPILE_NO_FLAGS) : NULL;
         if (seat->keyboard.xkb.compose_table) {
             // Set up XKB compose state
             if (seat->keyboard.xkb.compose_state != NULL) {

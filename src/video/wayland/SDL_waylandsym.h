@@ -44,12 +44,12 @@ SDL_WAYLAND_SYM(void, wl_proxy_destroy, (struct wl_proxy *))
 SDL_WAYLAND_SYM(int, wl_proxy_add_listener, (struct wl_proxy *, void (**)(void), void *))
 SDL_WAYLAND_SYM(void, wl_proxy_set_user_data, (struct wl_proxy *, void *))
 SDL_WAYLAND_SYM(void *, wl_proxy_get_user_data, (struct wl_proxy *))
-SDL_WAYLAND_SYM(uint32_t, wl_proxy_get_version, (struct wl_proxy *))
+SDL_WAYLAND_SYM_OPT(uint32_t, wl_proxy_get_version, (struct wl_proxy *))
 SDL_WAYLAND_SYM(uint32_t, wl_proxy_get_id, (struct wl_proxy *))
 SDL_WAYLAND_SYM(const char *, wl_proxy_get_class, (struct wl_proxy *))
 SDL_WAYLAND_SYM(void, wl_proxy_set_queue, (struct wl_proxy *, struct wl_event_queue *))
-SDL_WAYLAND_SYM(void *, wl_proxy_create_wrapper, (void *))
-SDL_WAYLAND_SYM(void, wl_proxy_wrapper_destroy, (void *))
+SDL_WAYLAND_SYM_OPT(void *, wl_proxy_create_wrapper, (void *))
+SDL_WAYLAND_SYM_OPT(void, wl_proxy_wrapper_destroy, (void *))
 SDL_WAYLAND_SYM(struct wl_display *, wl_display_connect, (const char *))
 SDL_WAYLAND_SYM(struct wl_display *, wl_display_connect_to_fd, (int))
 SDL_WAYLAND_SYM(void, wl_display_disconnect, (struct wl_display *))
@@ -75,9 +75,9 @@ SDL_WAYLAND_SYM(int, wl_list_length, (const struct wl_list *))
 SDL_WAYLAND_SYM(int, wl_list_empty, (const struct wl_list *))
 SDL_WAYLAND_SYM(void, wl_list_insert_list, (struct wl_list *, struct wl_list *))
 SDL_WAYLAND_SYM(struct wl_proxy *, wl_proxy_marshal_constructor, (struct wl_proxy *, uint32_t opcode, const struct wl_interface *interface, ...))
-SDL_WAYLAND_SYM(struct wl_proxy *, wl_proxy_marshal_constructor_versioned, (struct wl_proxy *proxy, uint32_t opcode, const struct wl_interface *interface, uint32_t version, ...))
-SDL_WAYLAND_SYM(void, wl_proxy_set_tag, (struct wl_proxy *, const char * const *))
-SDL_WAYLAND_SYM(const char * const *, wl_proxy_get_tag, (struct wl_proxy *))
+SDL_WAYLAND_SYM_OPT(struct wl_proxy *, wl_proxy_marshal_constructor_versioned, (struct wl_proxy *proxy, uint32_t opcode, const struct wl_interface *interface, uint32_t version, ...))
+SDL_WAYLAND_SYM_OPT(void, wl_proxy_set_tag, (struct wl_proxy *, const char * const *))
+SDL_WAYLAND_SYM_OPT(const char * const *, wl_proxy_get_tag, (struct wl_proxy *))
 
 #if SDL_WAYLAND_CHECK_VERSION(1, 20, 0)
 /* wayland-scanner 1.20 generates code that will call these, so these are
@@ -144,15 +144,15 @@ SDL_WAYLAND_SYM(enum xkb_state_component, xkb_state_update_mask, (struct xkb_sta
                       xkb_layout_index_t depressed_layout,\
                       xkb_layout_index_t latched_layout,\
                       xkb_layout_index_t locked_layout) )
-SDL_WAYLAND_SYM(struct xkb_compose_table *, xkb_compose_table_new_from_locale, (struct xkb_context *,\
+SDL_WAYLAND_SYM_OPT(struct xkb_compose_table *, xkb_compose_table_new_from_locale, (struct xkb_context *,\
                       const char *locale, enum xkb_compose_compile_flags) )
-SDL_WAYLAND_SYM(void, xkb_compose_state_reset, (struct xkb_compose_state *) )
-SDL_WAYLAND_SYM(void, xkb_compose_table_unref, (struct xkb_compose_table *) )
-SDL_WAYLAND_SYM(struct xkb_compose_state *, xkb_compose_state_new, (struct xkb_compose_table *, enum xkb_compose_state_flags) )
-SDL_WAYLAND_SYM(void, xkb_compose_state_unref, (struct xkb_compose_state *) )
-SDL_WAYLAND_SYM(enum xkb_compose_feed_result, xkb_compose_state_feed, (struct xkb_compose_state *, xkb_keysym_t) )
-SDL_WAYLAND_SYM(enum xkb_compose_status, xkb_compose_state_get_status, (struct xkb_compose_state *) )
-SDL_WAYLAND_SYM(xkb_keysym_t, xkb_compose_state_get_one_sym, (struct xkb_compose_state *) )
+SDL_WAYLAND_SYM_OPT(void, xkb_compose_state_reset, (struct xkb_compose_state *) )
+SDL_WAYLAND_SYM_OPT(void, xkb_compose_table_unref, (struct xkb_compose_table *) )
+SDL_WAYLAND_SYM_OPT(struct xkb_compose_state *, xkb_compose_state_new, (struct xkb_compose_table *, enum xkb_compose_state_flags) )
+SDL_WAYLAND_SYM_OPT(void, xkb_compose_state_unref, (struct xkb_compose_state *) )
+SDL_WAYLAND_SYM_OPT(enum xkb_compose_feed_result, xkb_compose_state_feed, (struct xkb_compose_state *, xkb_keysym_t) )
+SDL_WAYLAND_SYM_OPT(enum xkb_compose_status, xkb_compose_state_get_status, (struct xkb_compose_state *) )
+SDL_WAYLAND_SYM_OPT(xkb_keysym_t, xkb_compose_state_get_one_sym, (struct xkb_compose_state *) )
 SDL_WAYLAND_SYM(void, xkb_keymap_key_for_each, (struct xkb_keymap *, xkb_keymap_key_iter_t, void *) )
 SDL_WAYLAND_SYM(xkb_layout_index_t, xkb_keymap_num_layouts, (struct xkb_keymap *) )
 SDL_WAYLAND_SYM(int, xkb_keymap_key_get_syms_by_level, (struct xkb_keymap *, xkb_keycode_t, xkb_layout_index_t, xkb_level_index_t, const xkb_keysym_t **) )
@@ -161,12 +161,10 @@ SDL_WAYLAND_SYM(uint32_t, xkb_keysym_to_utf32, (xkb_keysym_t) )
 SDL_WAYLAND_SYM(uint32_t, xkb_keymap_mod_get_index, (struct xkb_keymap *, const char *) )
 SDL_WAYLAND_SYM(const char *, xkb_keymap_layout_get_name, (struct xkb_keymap *, xkb_layout_index_t))
 
-#if SDL_XKBCOMMON_CHECK_VERSION(1, 0, 0)
-SDL_WAYLAND_SYM(size_t, xkb_keymap_key_get_mods_for_level, (struct xkb_keymap *, xkb_keycode_t, xkb_layout_index_t, xkb_level_index_t, xkb_mod_mask_t *, size_t) )
-#else
-// Only needed in the fallback replacement for xkb_keymap_key_get_mods_for_level().
+// Which of these is usable is decided at runtime, not build time: webOS builds against a
+// newer libxkbcommon than the TV actually ships, so the fallback must always be available.
+SDL_WAYLAND_SYM_OPT(size_t, xkb_keymap_key_get_mods_for_level, (struct xkb_keymap *, xkb_keycode_t, xkb_layout_index_t, xkb_level_index_t, xkb_mod_mask_t *, size_t) )
 SDL_WAYLAND_SYM(xkb_level_index_t, xkb_state_key_get_level, (struct xkb_state *, xkb_keycode_t, xkb_layout_index_t) )
-#endif
 
 #if SDL_XKBCOMMON_CHECK_VERSION(1, 10, 0)
 SDL_WAYLAND_SYM(xkb_mod_mask_t, xkb_keymap_mod_get_mask, (struct xkb_keymap *, const char *))

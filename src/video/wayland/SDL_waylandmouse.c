@@ -411,6 +411,12 @@ static bool Wayland_StartCursorThread(SDL_VideoData *data)
             goto cleanup;
         }
 
+        /* Proxy wrappers are libwayland 1.11+; without them there is no way to
+         * put the compositor proxy on the cursor thread's queue. */
+        if (!WAYLAND_wl_proxy_create_wrapper) {
+            goto cleanup;
+        }
+
         cursor_thread_context.compositor_wrapper = WAYLAND_wl_proxy_create_wrapper(data->compositor);
         if (!cursor_thread_context.compositor_wrapper) {
             goto cleanup;

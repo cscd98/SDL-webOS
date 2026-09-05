@@ -409,23 +409,36 @@ static void Wayland_VideoQuit(SDL_VideoDevice *_this);
 static const char *SDL_WAYLAND_surface_tag = "sdl-window";
 static const char *SDL_WAYLAND_output_tag = "sdl-output";
 
+/* Proxy tags arrived in libwayland 1.15 and webOS ships older. Without them we
+ * can't tell our own objects from foreign ones, so claim everything: an app that
+ * never adopts a foreign surface is unaffected. */
 void SDL_WAYLAND_register_surface(struct wl_surface *surface)
 {
-    wl_proxy_set_tag((struct wl_proxy *)surface, &SDL_WAYLAND_surface_tag);
+    if (WAYLAND_wl_proxy_set_tag) {
+        wl_proxy_set_tag((struct wl_proxy *)surface, &SDL_WAYLAND_surface_tag);
+    }
 }
 
 void SDL_WAYLAND_register_output(struct wl_output *output)
 {
-    wl_proxy_set_tag((struct wl_proxy *)output, &SDL_WAYLAND_output_tag);
+    if (WAYLAND_wl_proxy_set_tag) {
+        wl_proxy_set_tag((struct wl_proxy *)output, &SDL_WAYLAND_output_tag);
+    }
 }
 
 bool SDL_WAYLAND_own_surface(struct wl_surface *surface)
 {
+    if (!WAYLAND_wl_proxy_get_tag) {
+        return true;
+    }
     return wl_proxy_get_tag((struct wl_proxy *)surface) == &SDL_WAYLAND_surface_tag;
 }
 
 bool SDL_WAYLAND_own_output(struct wl_output *output)
 {
+    if (!WAYLAND_wl_proxy_get_tag) {
+        return true;
+    }
     return wl_proxy_get_tag((struct wl_proxy *)output) == &SDL_WAYLAND_output_tag;
 }
 
