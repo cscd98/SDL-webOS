@@ -41,6 +41,8 @@ enum
     IR_KEY_CH_DOWN = 411,
     IR_KEY_BACK = 420,
     IR_KEY_HOME = 781,
+    IR_KEY_CURSOR_SHOW = 1206,
+    IR_KEY_CURSOR_HIDE = 1207,
     IR_KEY_GOTOPREV = 821,
     IR_KEY_GOTONEXT = 822,
 };
@@ -68,6 +70,10 @@ SDL_Scancode SDL_GetWebOSScancode(int keycode)
         return SDL_SCANCODE_WEBOS_CH_UP;
     case IR_KEY_CH_DOWN:
         return SDL_SCANCODE_WEBOS_CH_DOWN;
+    case IR_KEY_CURSOR_SHOW:
+        return SDL_SCANCODE_WEBOS_CURSOR_SHOW;
+    case IR_KEY_CURSOR_HIDE:
+        return SDL_SCANCODE_WEBOS_CURSOR_HIDE;
     case IR_KEY_PLAY:
         return SDL_SCANCODE_MEDIA_PLAY;
     case IR_KEY_STOP:
