@@ -3722,6 +3722,13 @@ void Wayland_SeatDestroy(SDL_WaylandSeat *seat, bool shutting_down)
     Wayland_SeatDestroyTouch(seat);
     Wayland_SeatDestroyTablet(seat, shutting_down);
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (seat->webos_seat) {
+        wl_webos_seat_destroy(seat->webos_seat);
+        seat->webos_seat = NULL;
+    }
+#endif
+
     if (wl_seat_get_version(seat->wl_seat) >= WL_SEAT_RELEASE_SINCE_VERSION) {
         wl_seat_release(seat->wl_seat);
     } else {
