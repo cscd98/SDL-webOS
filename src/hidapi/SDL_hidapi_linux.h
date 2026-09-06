@@ -41,7 +41,13 @@ static const SDL_UDEV_Symbols *udev_ctx = NULL;
 
 #undef HIDAPI_H__
 #define HIDAPI_ALLOW_BUILD_WORKAROUND_KERNEL_2_6_39
+#ifdef SDL_PLATFORM_WEBOS
+/* A fork of linux/hid.c that enumerates /dev directly, since the webOS app
+ * jail has no udev daemon and no /sys/class/hidraw to scan. */
+#include "webos/hid.c"
+#else
 #include "linux/hid.c"
+#endif
 #define HAVE_PLATFORM_BACKEND 1
 
 #endif /* SDL_USE_LIBUDEV */

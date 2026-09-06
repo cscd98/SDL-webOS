@@ -892,7 +892,25 @@ bool SDL_IsTV(void)
 
 static SDL_Sandbox SDL_DetectSandbox(void)
 {
-#if defined(SDL_PLATFORM_LINUX)
+#if defined(SDL_PLATFORM_WEBOS)
+    /* webOS apps run inside a jail that looks like a plain Linux system from
+     * the inside: none of the markers below are present, but there is no udev
+     * and no /sys/dev either. Report a container so the joystick and HIDAPI
+     * backends take their udev-less discovery paths.
+     *
+     * /var/palm/jail only exists outside the jail, so seeing it means we are
+     * running on the host side (a developer shell, a service) rather than as
+     * a sandboxed app. SDL_WEBOS_FORCE_JAILED forces the jailed answer for
+     * testing the container path from a shell. */
+    if (SDL_getenv("SDL_WEBOS_FORCE_JAILED")) {
+        return SDL_SANDBOX_UNKNOWN_CONTAINER;
+    }
+    if (access("/var/palm/jail", F_OK) == 0) {
+        return SDL_SANDBOX_NONE;
+    }
+    return SDL_SANDBOX_UNKNOWN_CONTAINER;
+
+#elif defined(SDL_PLATFORM_LINUX)
     if (access("/.flatpak-info", F_OK) == 0) {
         return SDL_SANDBOX_FLATPAK;
     }

@@ -45,6 +45,9 @@
 #include "../../core/linux/SDL_evdev.h"
 #include "../SDL_sysjoystick.h"
 #include "../SDL_joystick_c.h"
+#ifdef SDL_PLATFORM_WEBOS
+#include "../webos/uevent_monitor.h"
+#endif
 #include "../usb_ids.h"
 #include "SDL_sysjoystick_c.h"
 #include "../hidapi/SDL_hidapijoystick_c.h"
@@ -136,6 +139,10 @@
 #include "../../core/linux/SDL_evdev_capabilities.h"
 #include "../../core/linux/SDL_udev.h"
 
+#ifdef SDL_PLATFORM_WEBOS
+#include "../webos/dev_presence.h"
+#endif
+
 #if 0
 #define DEBUG_INPUT_EVENTS 1
 #endif
@@ -148,7 +155,11 @@ typedef enum
 {
     ENUMERATION_UNSET,
     ENUMERATION_LIBUDEV,
-    ENUMERATION_FALLBACK
+    ENUMERATION_FALLBACK,
+#ifdef SDL_PLATFORM_WEBOS
+    ENUMERATION_POLLING,
+    ENUMERATION_NETLINK,
+#endif
 } EnumerationMethod;
 
 static EnumerationMethod enumeration_method = ENUMERATION_UNSET;
@@ -191,9 +202,15 @@ static SDL_joylist_item *SDL_joylist_tail SDL_GUARDED_BY(SDL_joystick_lock) = NU
 static int numjoysticks SDL_GUARDED_BY(SDL_joystick_lock) = 0;
 static SDL_sensorlist_item *SDL_sensorlist SDL_GUARDED_BY(SDL_joystick_lock) = NULL;
 static int inotify_fd = -1;
+#ifdef SDL_PLATFORM_WEBOS
+static SDL_webOSUeventMonitor *joystick_uevent_monitor = NULL;
+#endif
 
 static Uint64 last_joy_detect_time;
 static time_t last_input_dir_mtime;
+#ifdef SDL_PLATFORM_WEBOS
+static Uint32 last_input_presence_flags;
+#endif
 
 static void FixupDeviceInfoForMapping(int fd, struct input_id *inpid)
 {
@@ -790,6 +807,8 @@ static void LINUX_InotifyJoystickDetect(void)
 }
 #endif // HAVE_INOTIFY
 
+#ifndef SDL_PLATFORM_WEBOS
+
 static int get_event_joystick_index(int event)
 {
     int joystick_index = -1;
@@ -947,12 +966,39 @@ static void LINUX_ScanInputDevices(void)
     free(entries); // This should NOT be SDL_free()
 }
 
+#endif // !SDL_PLATFORM_WEBOS
+
 static void LINUX_FallbackJoystickDetect(void)
 {
     const Uint32 SDL_JOY_DETECT_INTERVAL_MS = 3000; // Update every 3 seconds
     Uint64 now = SDL_GetTicks();
 
     if (!last_joy_detect_time || now >= (last_joy_detect_time + SDL_JOY_DETECT_INTERVAL_MS)) {
+#ifdef SDL_PLATFORM_WEBOS
+        /* No udev and no inotify in the app jail, so the only thing left is to
+         * rescan the node range and diff a presence bitmask against the last
+         * scan. This is the fallback for a kernel that won't let us bind a
+         * netlink uevent socket; see LINUX_NetlinkJoystickDetect(). */
+        SDL_webOSDevicePresenceCheck check = SDL_classic_joysticks ? SDL_WEBOS_DEVICE_PRESENCE_CHECK_JS
+                                                                  : SDL_WEBOS_DEVICE_PRESENCE_CHECK_EVDEV;
+        Uint32 presence_flags = SDL_webOSGetDevicePresenceFlags(check);
+        if (presence_flags != last_input_presence_flags) {
+            char path[PATH_MAX];
+            for (int i = 0; i < 32; i++) {
+                if (SDL_webOSIsDeviceIndexPresent(presence_flags, i)) {
+                    if (check == SDL_WEBOS_DEVICE_PRESENCE_CHECK_EVDEV) {
+                        (void)SDL_snprintf(path, SDL_arraysize(path), "/dev/input/event%d", i);
+                    } else if (check == SDL_WEBOS_DEVICE_PRESENCE_CHECK_JS) {
+                        (void)SDL_snprintf(path, SDL_arraysize(path), "/dev/input/js%d", i);
+                    } else {
+                        break;
+                    }
+                    MaybeAddDevice(path);
+                }
+            }
+            last_input_presence_flags = presence_flags;
+        }
+#else
         struct stat sb;
 
         // Opening input devices can generate synchronous device I/O, so avoid it if we can
@@ -964,13 +1010,38 @@ static void LINUX_FallbackJoystickDetect(void)
 
             last_input_dir_mtime = sb.st_mtime;
         }
+#endif
 
         last_joy_detect_time = now;
     }
 }
 
+#ifdef SDL_PLATFORM_WEBOS
+/* The uevent stream is explicit and ordered, so a device that disconnects and
+ * reconnects on the same index between two ticks produces a remove and an add
+ * rather than an unchanged presence bitmask. Devices already attached at init
+ * arrive here as ordinary adds, so there's no separate startup scan. */
+static void LINUX_NetlinkJoystickDetect(void)
+{
+    SDL_webOSUevent event;
+
+    while (SDL_webOSUeventMonitorPoll(joystick_uevent_monitor, &event)) {
+        if (event.action == SDL_WEBOS_UEVENT_ACTION_ADD) {
+            MaybeAddDevice(event.devnode);
+        } else {
+            MaybeRemoveDevice(event.devnode);
+        }
+    }
+}
+#endif
+
 static void LINUX_JoystickDetect(void)
 {
+#ifdef SDL_PLATFORM_WEBOS
+    if (enumeration_method == ENUMERATION_NETLINK) {
+        LINUX_NetlinkJoystickDetect();
+    } else
+#endif
 #ifdef SDL_USE_LIBUDEV
     if (enumeration_method == ENUMERATION_LIBUDEV) {
         // Polling will happen in the main event loop
@@ -1024,6 +1095,9 @@ static bool LINUX_JoystickInit(void)
     // Force immediate joystick detection if using fallback
     last_joy_detect_time = 0;
     last_input_dir_mtime = 0;
+#ifdef SDL_PLATFORM_WEBOS
+    last_input_presence_flags = 0;
+#endif
 
     // Manually scan first, since we sort by device number and udev doesn't
     LINUX_JoystickDetect();
@@ -1037,7 +1111,17 @@ static bool LINUX_JoystickInit(void)
         } else if (SDL_GetSandbox() != SDL_SANDBOX_NONE) {
             SDL_LogDebug(SDL_LOG_CATEGORY_INPUT,
                          "Container detected, disabling udev integration");
+#ifdef SDL_PLATFORM_WEBOS
+            /* No libudev in the app jail, so hotplug comes from a netlink
+             * uevent socket. Polling is the fallback for a kernel that won't
+             * let us bind one. */
+            joystick_uevent_monitor = SDL_webOSUeventMonitorOpen(
+                SDL_classic_joysticks ? SDL_WEBOS_DEVICE_PRESENCE_CHECK_JS
+                                      : SDL_WEBOS_DEVICE_PRESENCE_CHECK_EVDEV);
+            enumeration_method = joystick_uevent_monitor ? ENUMERATION_NETLINK : ENUMERATION_POLLING;
+#else
             enumeration_method = ENUMERATION_FALLBACK;
+#endif
 
         } else {
             SDL_LogDebug(SDL_LOG_CATEGORY_INPUT,
@@ -1068,7 +1152,12 @@ static bool LINUX_JoystickInit(void)
     }
 #endif
 
-    if (enumeration_method != ENUMERATION_LIBUDEV) {
+    if (enumeration_method != ENUMERATION_LIBUDEV
+#ifdef SDL_PLATFORM_WEBOS
+        // Neither webOS method wants inotify: /dev/input is not watchable in the app jail
+        && enumeration_method != ENUMERATION_NETLINK && enumeration_method != ENUMERATION_POLLING
+#endif
+    ) {
 #ifdef HAVE_INOTIFY
         inotify_fd = SDL_inotify_init1();
 
@@ -2255,6 +2344,11 @@ static void LINUX_JoystickQuit(void)
         close(inotify_fd);
         inotify_fd = -1;
     }
+
+#ifdef SDL_PLATFORM_WEBOS
+    SDL_webOSUeventMonitorClose(joystick_uevent_monitor);
+    joystick_uevent_monitor = NULL;
+#endif
 
     for (item = SDL_joylist; item; item = next) {
         next = item->next;

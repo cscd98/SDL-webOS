@@ -3256,6 +3256,13 @@ bool SDL_IsGamepad(SDL_JoystickID instance_id)
  */
 bool SDL_ShouldIgnoreGamepad(Uint16 vendor_id, Uint16 product_id, Uint16 version, const char *name)
 {
+#ifdef SDL_PLATFORM_WEBOS
+    if (name && (SDL_startswith(name, "LGE ") || SDL_startswith(name, "LG "))) {
+        // The TV's own remotes and network input nodes are not gamepads
+        return true;
+    }
+#endif
+
     if (name) {
         for (int i = 0; i < SDL_arraysize(SDL_gamepad_blacklist_words); i++) {
             const struct SDL_GamepadBlacklistWords *blacklist_word = &SDL_gamepad_blacklist_words[i];

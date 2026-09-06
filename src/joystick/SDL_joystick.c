@@ -454,6 +454,9 @@ static Uint32 initial_blacklist_devices[] = {
     MAKE_VIDPID(0x3434, 0x02a0), // Keychron K10 Pro System Control
     MAKE_VIDPID(0x3434, 0x0353), // Keychron V5 System Control
     MAKE_VIDPID(0x3434, 0xd030), // Keychron Link
+#ifdef SDL_PLATFORM_WEBOS
+    MAKE_VIDPID(0x9999, 0x9999), // Smart Remote RCU Input, LGE Network Input
+#endif
 };
 static SDL_vidpid_list blacklist_devices = {
     SDL_HINT_JOYSTICK_BLACKLIST_DEVICES, 0, 0, NULL,
