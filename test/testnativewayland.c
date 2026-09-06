@@ -16,10 +16,16 @@
 
 #include <SDL3/SDL.h>
 #include <wayland-client.h>
+#include <wayland-version.h>
 #include <xdg-shell-client-protocol.h>
 
+// Proxy tags arrived in wayland 1.17; webOS ships older.
+#define HAVE_WL_PROXY_TAG (WAYLAND_VERSION_MAJOR > 1 || (WAYLAND_VERSION_MAJOR == 1 && WAYLAND_VERSION_MINOR >= 17))
+
 static void *native_userdata_ptr = (void *)0xBAADF00D;
+#if HAVE_WL_PROXY_TAG
 static const char *native_surface_tag = "SDL_NativeSurfaceTag";
+#endif
 
 static void *CreateWindowWayland(int w, int h);
 static void DestroyWindowWayland(void *window);
@@ -143,7 +149,9 @@ static void *CreateWindowWayland(int w, int h)
     state.wl_surface = wl_compositor_create_surface(state.wl_compositor);
 
     /* Set the native tag and userdata values, which should be the same at exit. */
+#if HAVE_WL_PROXY_TAG
     wl_proxy_set_tag((struct wl_proxy *)state.wl_surface, &native_surface_tag);
+#endif
     wl_surface_set_user_data(state.wl_surface, native_userdata_ptr);
 
     /* Create the xdg_surface from the wl_surface. */
@@ -199,9 +207,11 @@ static void DestroyWindowWayland(void *window)
     }
     if (state.wl_surface) {
         /* Surface sanity check; these should be unmodified. */
+#if HAVE_WL_PROXY_TAG
         if (wl_proxy_get_tag((struct wl_proxy *)state.wl_surface) != &native_surface_tag) {
             SDL_LogError(SDL_LOG_CATEGORY_ERROR, "The wl_surface tag was modified, this indicates a problem inside of SDL.");
         }
+#endif
         if (wl_surface_get_user_data(state.wl_surface) != native_userdata_ptr) {
             SDL_LogError(SDL_LOG_CATEGORY_ERROR, "The wl_surface user data was modified, this indicates a problem inside of SDL.");
         }
