@@ -112,6 +112,17 @@
 #undef SDL_PLATFORM_LINUX
 #endif
 
+#ifdef __WEBOS__
+
+/**
+ * A preprocessor macro that is only defined if compiling for LG webOS.
+ *
+ * Unlike Android, webOS keeps SDL_PLATFORM_LINUX defined: it is a Linux system
+ * and uses the Linux evdev, hidraw and udev-less code paths.
+ */
+#define SDL_PLATFORM_WEBOS 1
+#endif
+
 #if defined(__unix__) || defined(__unix) || defined(unix)
 
 /**

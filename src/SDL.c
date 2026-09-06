@@ -778,6 +778,8 @@ const char *SDL_GetPlatform(void)
     return "HP-UX";
 #elif defined(SDL_PLATFORM_IRIX)
     return "Irix";
+#elif defined(SDL_PLATFORM_WEBOS)
+    return "webOS";
 #elif defined(SDL_PLATFORM_LINUX)
     return "Linux";
 #elif defined(__MINT__)

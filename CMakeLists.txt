@@ -372,7 +372,8 @@ dep_option(SDL_VIVANTE             "Use Vivante EGL video driver" ON "${UNIX_SYS
 dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR OPENBSD OR WINDOWS;NOT WEBOS" OFF)
 
 if(WEBOS)
-  set_option(SDL_WEBOS_BROKEN_ABI     "Build against webOS's modified SDL2 ABI" OFF)
+  # No SDL_WEBOS_BROKEN_ABI here: that exists in the SDL2 branch to match the
+  # modified libSDL2 LG ships. LG ships no SDL3, so there is no ABI to match.
   set_option(SDL_WEBOS_HAVE_LIBHELPER "Use libhelpers for Luna service calls" ON)
 endif()
 dep_option(SDL_RENDER_VULKAN       "Enable the Vulkan render driver" ON "SDL_RENDER;SDL_VULKAN" OFF)
@@ -2137,9 +2138,6 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
     # PUBLIC so tests and consumers agree with the library about the platform.
     sdl_compile_definitions(PUBLIC "__WEBOS__")
 
-    if(SDL_WEBOS_BROKEN_ABI)
-      set(HAVE_WEBOS_BROKEN_ABI 1)
-    endif()
     if(SDL_WEBOS_HAVE_LIBHELPER)
       sdl_compile_definitions(PRIVATE "SDL_WEBOS_HAVE_LIBHELPER=1")
     endif()

@@ -696,6 +696,16 @@ macro(CheckWayland)
         WaylandProtocolGen("${WAYLAND_SCANNER}" "${WAYLAND_SCANNER_CODE_MODE}" "${SDL3_SOURCE_DIR}/wayland-protocols/${_XML}" "${_PROTL}")
       endforeach()
 
+      # webOS protocols live in their own directory so that ordinary Wayland
+      # builds never run the scanner over them.
+      if(SDL_WAYLAND_WEBOS)
+        file(GLOB WAYLAND_WEBOS_PROTOCOLS_XML RELATIVE "${SDL3_SOURCE_DIR}/wayland-protocols/webos/" "${SDL3_SOURCE_DIR}/wayland-protocols/webos/*.xml")
+        foreach(_XML IN LISTS WAYLAND_WEBOS_PROTOCOLS_XML)
+          string(REGEX REPLACE "\\.xml$" "" _PROTL "${_XML}")
+          WaylandProtocolGen("${WAYLAND_SCANNER}" "${WAYLAND_SCANNER_CODE_MODE}" "${SDL3_SOURCE_DIR}/wayland-protocols/webos/${_XML}" "${_PROTL}")
+        endforeach()
+      endif()
+
       if(SDL_WAYLAND_SHARED AND NOT HAVE_SDL_LOADSO)
         message(WARNING "You must have SDL_LoadObject() support for dynamic Wayland loading")
       endif()
