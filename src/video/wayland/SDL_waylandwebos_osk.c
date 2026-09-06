@@ -365,7 +365,43 @@ static void osk_preedit_string(void *data, struct text_model *text_model, uint32
 
 static void osk_delete_surrounding_text(void *data, struct text_model *text_model, uint32_t serial, int32_t index, uint32_t length)
 {
-    // FIXME: Do we care about this event?
+    SDL_VideoData *display = (SDL_VideoData *)data;
+    SDL_KeyboardID keyboard;
+    int before, after, i;
+
+    if (text_model != display->webos_text_input.model || !display->webos_text_input.seat) {
+        return;
+    }
+
+    keyboard = display->webos_text_input.seat->keyboard.sdl_id;
+
+    if ((Sint32)length == -1) {
+        // The panel's "Clear All" key asks for everything, however much that is.
+        SDL_SendKeyboardKey(0, keyboard, 0, SDL_SCANCODE_CLEAR, true);
+        SDL_SendKeyboardKey(0, keyboard, 0, SDL_SCANCODE_CLEAR, false);
+        return;
+    }
+
+    /* SDL can't take back text it has already delivered, so replay the deletion
+     * as the key presses that would produce it. Only a run touching the cursor
+     * can be expressed that way, and the byte length is used as a character
+     * count, which holds for the Latin dictionaries the panel predicts from.
+     */
+    if (index > 0 || index + (Sint32)length < 0) {
+        return;
+    }
+
+    before = -index;
+    after = (int)length - before;
+
+    for (i = 0; i < before; ++i) {
+        SDL_SendKeyboardKey(0, keyboard, 0, SDL_SCANCODE_BACKSPACE, true);
+        SDL_SendKeyboardKey(0, keyboard, 0, SDL_SCANCODE_BACKSPACE, false);
+    }
+    for (i = 0; i < after; ++i) {
+        SDL_SendKeyboardKey(0, keyboard, 0, SDL_SCANCODE_DELETE, true);
+        SDL_SendKeyboardKey(0, keyboard, 0, SDL_SCANCODE_DELETE, false);
+    }
 }
 
 static void osk_cursor_position(void *data, struct text_model *text_model, uint32_t serial, int32_t index, int32_t anchor)
@@ -422,18 +458,17 @@ static void osk_enter(void *data, struct text_model *text_model, struct wl_surfa
 static void osk_leave(void *data, struct text_model *text_model)
 {
     SDL_VideoData *display = (SDL_VideoData *)data;
-    SDL_WindowData *wind = display->webos_text_input.window;
 
-    if (text_model != display->webos_text_input.model || !wind) {
+    if (text_model != display->webos_text_input.model) {
         return;
     }
 
-    /* The panel is dismissed without an input_panel_state event when the
-     * compositor drops it, which it does after a few idle seconds. */
+    /* The compositor has deactivated the model, so drop it, but leave the
+     * window's text input request alone: it did not ask to stop, and regaining
+     * keyboard focus is what brings the panel back. */
     display->webos_text_input.seat = NULL;
     WaylandWebOS_Deactivate(display);
     SDL_SendScreenKeyboardHidden();
-    SDL_StopTextInput(wind->sdlwindow);
 }
 
 static void osk_input_panel_state(void *data, struct text_model *text_model, uint32_t state)
@@ -447,13 +482,10 @@ static void osk_input_panel_state(void *data, struct text_model *text_model, uin
     if (state) {
         SDL_SendScreenKeyboardShown();
     } else {
+        /* The compositor lowers the panel by itself when a hardware keyboard
+         * appears. The model stays activated and keeps delivering text, so this
+         * is not the end of text input. */
         SDL_SendScreenKeyboardHidden();
-
-        /* Dismissing the panel is the only way to end text input from the
-         * remote, so treat it as such and let the deactivate go out. */
-        if (display->webos_text_input.window) {
-            SDL_StopTextInput(display->webos_text_input.window->sdlwindow);
-        }
     }
 }
 
