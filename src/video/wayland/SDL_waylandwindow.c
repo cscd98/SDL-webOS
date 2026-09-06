@@ -3090,6 +3090,11 @@ void Wayland_SetWindowTitle(SDL_VideoDevice *_this, SDL_Window *window)
         if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL && wind->shell_surface.xdg.toplevel.xdg_toplevel) {
         xdg_toplevel_set_title(wind->shell_surface.xdg.toplevel.xdg_toplevel, title);
     }
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    else if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_CUSTOM && wind->shell_surface.webos.webos) {
+        wl_webos_shell_surface_set_property(wind->shell_surface.webos.webos, "title", title);
+    }
+#endif
 }
 
 static int icon_sort_callback(const void *a, const void *b)
