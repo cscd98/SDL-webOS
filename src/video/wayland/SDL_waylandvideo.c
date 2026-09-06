@@ -53,6 +53,7 @@
 #include "webos-input-manager-client-protocol.h"
 #include "SDL_waylandwebos_abifix.h"
 #include "SDL_waylandwebos_osk.h"
+#include "SDL_waylandwebos_foreign.h"
 #endif
 
 #include "alpha-modifier-v1-client-protocol.h"
@@ -1354,6 +1355,8 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
         d->shell.webos = wl_registry_bind(d->registry, id, &wl_webos_shell_interface, SDL_min(version, 1));
     } else if (SDL_strcmp(interface, "text_model_factory") == 0) {
         WaylandWebOS_DisplayInitTextModelFactory(d, id);
+    } else if (SDL_strcmp(interface, "wl_webos_foreign") == 0) {
+        WaylandWebOS_DisplayInitForeign(d, id);
 #endif
     } else if (SDL_strcmp(interface, "wl_shm") == 0) {
         d->shm = wl_registry_bind(registry, id, &wl_shm_interface, SDL_min(SDL_WL_SHM_VERSION, version));
@@ -1683,6 +1686,7 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     WaylandWebOS_QuitTextInput(data);
+    WaylandWebOS_QuitForeign(data);
 
     if (data->webos_input_manager) {
         wl_webos_input_manager_destroy(data->webos_input_manager);

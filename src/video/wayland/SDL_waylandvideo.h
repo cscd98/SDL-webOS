@@ -87,6 +87,14 @@ struct SDL_VideoData
         int preedit_cursor;
         bool has_preedit;
     } webos_text_input;
+
+    /* Exported windows: regions of the app's surface that the compositor fills
+     * from a plane of its own, most often the video pipeline. */
+    struct
+    {
+        struct wl_webos_foreign *foreign;
+        struct SDL_WaylandExportedWindow *windows;
+    } webos_foreign;
 #endif
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
     struct zwp_pointer_constraints_v1 *pointer_constraints;

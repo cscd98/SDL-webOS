@@ -24,14 +24,33 @@
 
 #include "../../video/SDL_sysvideo.h"
 
-/* The SDL2 fork dispatched these through WebOS* hooks that it added to
- * SDL_VideoDevice. Those hooks, and the wayland video backend behind them, land
- * with the wayland port; until then these entry points exist so that the public
- * API surface is complete, and report that nothing implements them. */
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+#include "../../video/wayland/SDL_waylandwebos_foreign.h"
+
+/* There is no vtable slot for these, so dispatch on the driver name, the same
+ * check SDL_video.c uses for its own x11 special cases. */
+static SDL_VideoDevice *GetWaylandVideoDevice(void)
+{
+    SDL_VideoDevice *_this = SDL_GetVideoDevice();
+
+    if (_this && SDL_strcmp(_this->name, "wayland") == 0) {
+        return _this;
+    }
+    return NULL;
+}
+#endif
 
 const char *SDL_webOSCreateExportedWindow(SDL_webOSExportedWindowType type)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_VideoDevice *_this = GetWaylandVideoDevice();
+
+    if (_this) {
+        return WaylandWebOS_CreateExportedWindow(_this, type);
+    }
+#else
     (void)type;
+#endif
 
     SDL_SetError("Failed creating exported window: the current video driver does not support exported windows");
     return NULL;
@@ -39,35 +58,68 @@ const char *SDL_webOSCreateExportedWindow(SDL_webOSExportedWindowType type)
 
 bool SDL_webOSSetExportedWindow(const char *windowId, SDL_Rect *src, SDL_Rect *dst)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_VideoDevice *_this = GetWaylandVideoDevice();
+
+    if (_this) {
+        return WaylandWebOS_SetExportedWindow(_this, windowId, src, dst);
+    }
+#else
     (void)windowId;
     (void)src;
     (void)dst;
+#endif
 
     return SDL_SetError("Failed to set exported window: the current video driver does not support exported windows");
 }
 
 bool SDL_webOSExportedSetCropRegion(const char *windowId, SDL_Rect *org, SDL_Rect *src, SDL_Rect *dst)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_VideoDevice *_this = GetWaylandVideoDevice();
+
+    if (_this) {
+        return WaylandWebOS_ExportedSetCropRegion(_this, windowId, org, src, dst);
+    }
+#else
     (void)windowId;
     (void)org;
     (void)src;
     (void)dst;
+#endif
 
     return SDL_SetError("Failed to set crop region: the current video driver does not support exported windows");
 }
 
 bool SDL_webOSExportedSetProperty(const char *windowId, const char *name, const char *value)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_VideoDevice *_this = GetWaylandVideoDevice();
+
+    if (_this) {
+        return WaylandWebOS_ExportedSetProperty(_this, windowId, name, value);
+    }
+#else
     (void)windowId;
     (void)name;
     (void)value;
+#endif
 
     return SDL_SetError("Failed to set property: the current video driver does not support exported windows");
 }
 
 void SDL_webOSDestroyExportedWindow(const char *windowId)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_VideoDevice *_this = GetWaylandVideoDevice();
+
+    if (_this) {
+        WaylandWebOS_DestroyExportedWindow(_this, windowId);
+        return;
+    }
+#else
     (void)windowId;
+#endif
 
     SDL_SetError("Failed to destroy exported window: the current video driver does not support exported windows");
 }
