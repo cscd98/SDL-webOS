@@ -2268,6 +2268,13 @@ static bool keyboard_input_get_text(char text[8], const SDL_WaylandSeat *seat, u
         }
     }
 
+    /* Older xkbcommon, webOS's included, has no bound on Unicode keysyms and
+     * encodes anything it is given, so check the keysym before converting it.
+     */
+    if ((sym & 0xff000000) == 0x01000000 && !SDL_KeySymToUcs4(sym)) {
+        return false;
+    }
+
     return WAYLAND_xkb_keysym_to_utf8(sym, text, 8) > 0;
 }
 
