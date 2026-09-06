@@ -32,7 +32,6 @@
 #include "SDL_waylandevents_c.h"
 #include "SDL_waylandmouse.h"
 #include "SDL_waylandwindow.h"
-#include "SDL_waylandwebos.h"
 #include "SDL_waylandvideo.h"
 #include "../../SDL_hints_c.h"
 #include "SDL_waylandcolor.h"
@@ -48,8 +47,12 @@
 #include "xdg-dialog-v1-client-protocol.h"
 #include "frog-color-management-v1-client-protocol.h"
 #include "xdg-toplevel-icon-v1-client-protocol.h"
-#include "webos-shell-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+#include "SDL_waylandwebos.h"
+#include "webos-shell-client-protocol.h"
+#endif
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -2718,6 +2721,7 @@ bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_W
 }
 
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 /* webOS offers neither xdg-shell nor libdecor, so the role is assigned by hand.
  * Order matters: the role and its properties must reach the compositor before
  * the EGL stack touches the surface, hence the flush and roundtrip. */
@@ -2739,6 +2743,7 @@ static void WebOS_AssignShellRole(SDL_VideoData *c, SDL_Window *window, SDL_Wind
     WAYLAND_wl_display_flush(c->display);
     WAYLAND_wl_display_roundtrip(c->display);
 }
+#endif // SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 
 bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID create_props)
 {
@@ -2875,10 +2880,12 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
         }
     }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     /* Assign the webOS shell role before EGL, matching SDL2's order. */
     if (!custom_surface_role && !c->shell.xdg && c->shell.wl) {
         WebOS_AssignShellRole(c, window, data);
     }
+#endif
 
     if (create_egl_window) {
         data->egl_window = WAYLAND_wl_egl_window_create(data->surface, data->current.pixel_width, data->current.pixel_height);
@@ -2910,11 +2917,13 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
             } else {
                 data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL;
             }
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
         } else if (c->shell.wl) {
             /* Role already assigned above; take the roleless path so the backend
              * doesn't wait on an xdg configure that never arrives. */
             data->shell_surface_type = WAYLAND_SHELL_SURFACE_TYPE_CUSTOM;
             data->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_SHOWN;
+#endif
         } // All other cases will be WAYLAND_SURFACE_UNKNOWN
     } else {
         // Roleless and external surfaces are always considered to be in the shown state by the backend.

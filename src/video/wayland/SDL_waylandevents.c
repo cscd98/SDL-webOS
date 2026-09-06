@@ -48,8 +48,11 @@
 #include "pointer-gestures-unstable-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 #include "webos-input-manager-client-protocol.h"
 #include "SDL_waylandwebos_abifix.h"
+#endif
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>

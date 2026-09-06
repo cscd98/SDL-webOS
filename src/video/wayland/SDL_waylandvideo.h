@@ -57,17 +57,21 @@ struct SDL_VideoData
     struct
     {
         struct xdg_wm_base *xdg;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
         /* webOS offers neither xdg-shell nor libdecor; these are the only roles. */
         struct wl_shell *wl;
         struct wl_webos_shell *webos;
+#endif
 #ifdef HAVE_LIBDECOR_H
         struct libdecor *libdecor;
 #endif
     } shell;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     /* webOS has no pointer-warp or pointer-constraints protocol; the starfish
      * pointer is how the cursor is moved there. */
     struct wl_starfish_pointer *starfish_pointer;
     struct wl_webos_input_manager *webos_input_manager;
+#endif
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
     struct zwp_pointer_constraints_v1 *pointer_constraints;
     struct wp_pointer_warp_v1 *wp_pointer_warp_v1;

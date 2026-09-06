@@ -66,11 +66,13 @@ struct SDL_WindowData
 
             Uint32 serial;
         } xdg;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
         struct
         {
             struct wl_shell_surface *wl;
             struct wl_webos_shell_surface *webos;
         } webos;
+#endif
     } shell_surface;
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     Uint32 webos_shell_state;

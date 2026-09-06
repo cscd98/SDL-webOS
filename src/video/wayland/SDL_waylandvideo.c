@@ -47,12 +47,15 @@
 
 #include <wayland-util.h>
 
-#include "alpha-modifier-v1-client-protocol.h"
-#include "cursor-shape-v1-client-protocol.h"
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 #include "webos-shell-client-protocol.h"
 #include "starfish-client-protocol.h"
 #include "webos-input-manager-client-protocol.h"
 #include "SDL_waylandwebos_abifix.h"
+#endif
+
+#include "alpha-modifier-v1-client-protocol.h"
+#include "cursor-shape-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "frog-color-management-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
@@ -1324,6 +1327,7 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
     } else if (SDL_strcmp(interface, "xdg_wm_base") == 0) {
         d->shell.xdg = wl_registry_bind(d->registry, id, &xdg_wm_base_interface, SDL_min(version, 7));
         xdg_wm_base_add_listener(d->shell.xdg, &_xdg_wm_base_listener, NULL);
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     } else if (SDL_strcmp(interface, "wl_shell") == 0) {
         d->shell.wl = wl_registry_bind(d->registry, id, &wl_shell_interface, 1);
     } else if (SDL_strcmp(interface, "wl_webos_input_manager") == 0) {
@@ -1342,6 +1346,7 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
                                                    sleep_hint ? (uint32_t)SDL_atoi(sleep_hint) : 300000);
     } else if (SDL_strcmp(interface, "wl_webos_shell") == 0) {
         d->shell.webos = wl_registry_bind(d->registry, id, &wl_webos_shell_interface, SDL_min(version, 1));
+#endif
     } else if (SDL_strcmp(interface, "wl_shm") == 0) {
         d->shm = wl_registry_bind(registry, id, &wl_shm_interface, SDL_min(SDL_WL_SHM_VERSION, version));
     } else if (SDL_strcmp(interface, "zwp_relative_pointer_manager_v1") == 0) {
@@ -1663,6 +1668,7 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
         data->shm = NULL;
     }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     if (data->webos_input_manager) {
         wl_webos_input_manager_destroy(data->webos_input_manager);
         data->webos_input_manager = NULL;
@@ -1683,6 +1689,7 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
         wl_shell_destroy(data->shell.wl);
         data->shell.wl = NULL;
     }
+#endif
 
     if (data->shell.xdg) {
         xdg_wm_base_destroy(data->shell.xdg);
