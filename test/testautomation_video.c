@@ -2064,8 +2064,8 @@ static int SDLCALL video_getSetWindowState(void *arg)
      */
     if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0 || SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
         const char *desktop = SDL_GetEnvironmentVariable(SDL_GetEnvironment(), "XDG_CURRENT_DESKTOP");
-        if (SDL_strcmp(desktop, "GNOME") != 0 && SDL_strcmp(desktop, "KDE") != 0) {
-            SDLTest_Log("Skipping test video_getSetWindowState: desktop environment %s not supported", desktop);
+        if (!desktop || (SDL_strcmp(desktop, "GNOME") != 0 && SDL_strcmp(desktop, "KDE") != 0)) {
+            SDLTest_Log("Skipping test video_getSetWindowState: desktop environment %s not supported", desktop ? desktop : "(unset)");
             return TEST_SKIPPED;
         }
     }
