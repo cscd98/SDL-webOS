@@ -48,6 +48,8 @@
 #include "pointer-gestures-unstable-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "webos-input-manager-client-protocol.h"
+#include "SDL_waylandwebos_abifix.h"
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -3584,6 +3586,18 @@ static void Wayland_SeatDestroyTablet(SDL_WaylandSeat *seat, bool shutting_down)
     WAYLAND_wl_list_init(&seat->tablet.tool_list);
 }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+static void webos_seat_info(void *data, struct wl_webos_seat *wl_webos_seat, uint32_t id,
+                            const char *name, uint32_t designator, uint32_t capabilities)
+{
+    // Nothing to do with this; the seat is requested for its side effects.
+}
+
+static const struct wl_webos_seat_listener webos_seat_listener = {
+    webos_seat_info
+};
+#endif
+
 void Wayland_DisplayCreateSeat(SDL_VideoData *display, struct wl_seat *wl_seat, Uint32 id)
 {
     SDL_WaylandSeat *seat = SDL_calloc(1, sizeof(SDL_WaylandSeat));
@@ -3606,6 +3620,18 @@ void Wayland_DisplayCreateSeat(SDL_VideoData *display, struct wl_seat *wl_seat, 
 
     wl_seat_set_user_data(seat->wl_seat, seat);
     wl_seat_add_listener(seat->wl_seat, &seat_listener, seat);
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* LG's compositor only reports pointer capability on seats that have been
+     * claimed through the input manager, so ask for one even though the events
+     * it sends are of no interest. */
+    if (display->webos_input_manager) {
+        seat->webos_seat = WaylandWebOS_GetWebOSSeat(display->webos_input_manager, seat->wl_seat);
+        if (seat->webos_seat) {
+            wl_webos_seat_add_listener(seat->webos_seat, &webos_seat_listener, seat);
+        }
+    }
+#endif
 
     if (display->tablet_manager) {
         Wayland_SeatInitTabletSupport(seat);

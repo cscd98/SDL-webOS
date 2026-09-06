@@ -4437,6 +4437,27 @@ extern "C" {
 #define SDL_HINT_WAVE_TRUNCATION "SDL_WAVE_TRUNCATION"
 
 /**
+ * A variable containing a list of Bluetooth devices to ignore in
+ * SDL_hid_enumerate() on webOS.
+ *
+ * The TV pairs its own remotes and accessories over Bluetooth, and they show
+ * up as hidraw nodes alongside real controllers. This hint drops them before
+ * they are reported.
+ *
+ * The format of the string is a comma separated list of USB VID/PID pairs in
+ * hexadecimal form, e.g.
+ *
+ * `0xAAAA/0xBBBB,0xCCCC/0xDDDD`
+ *
+ * A product ID of 0x0000 matches every product from that vendor.
+ *
+ * This hint should be set before SDL is initialized.
+ *
+ * \since This hint is available since SDL 3.4.0.
+ */
+#define SDL_HINT_WEBOS_HIDAPI_IGNORE_BLUETOOTH_DEVICES "SDL_WEBOS_HIDAPI_IGNORE_BLUETOOTH_DEVICES"
+
+/**
  * A variable controlling whether SDL registers the app with the webOS
  * application manager.
  *
@@ -4454,6 +4475,16 @@ extern "C" {
  * \since This hint is available since SDL 3.4.0.
  */
 #define SDL_HINT_WEBOS_REGISTER_APP "SDL_WEBOS_REGISTER_APP"
+
+/**
+ * How long the magic remote pointer stays awake, in milliseconds.
+ *
+ * webOS puts the pointer to sleep when the remote is idle; while it is asleep
+ * no pointer events are delivered. Defaults to 300000.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_CURSOR_SLEEP_TIME "SDL_WEBOS_CURSOR_SLEEP_TIME"
 
 /**
  * A variable controlling whether the window is activated when the

@@ -124,6 +124,9 @@ typedef struct SDL_WaylandSeat
 {
     SDL_VideoData *display;
     struct wl_seat *wl_seat;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    struct wl_webos_seat *webos_seat;
+#endif
     SDL_WaylandDataDevice *data_device;
     SDL_WaylandPrimarySelectionDevice *primary_selection_device;
     char *name;

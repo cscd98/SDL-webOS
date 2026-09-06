@@ -64,6 +64,10 @@ struct SDL_VideoData
         struct libdecor *libdecor;
 #endif
     } shell;
+    /* webOS has no pointer-warp or pointer-constraints protocol; the starfish
+     * pointer is how the cursor is moved there. */
+    struct wl_starfish_pointer *starfish_pointer;
+    struct wl_webos_input_manager *webos_input_manager;
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
     struct zwp_pointer_constraints_v1 *pointer_constraints;
     struct wp_pointer_warp_v1 *wp_pointer_warp_v1;

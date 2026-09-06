@@ -43,6 +43,7 @@
 #include "viewporter-client-protocol.h"
 #include "pointer-warp-v1-client-protocol.h"
 #include "tablet-v2-client-protocol.h"
+#include "starfish-client-protocol.h"
 
 #include "../../SDL_hints_c.h"
 
@@ -1330,7 +1331,13 @@ static bool Wayland_WarpMouseRelative(SDL_Window *window, float x, float y)
     SDL_WindowData *wind = window->internal;
     SDL_WaylandSeat *seat;
 
-    if (d->wp_pointer_warp_v1 || d->pointer_constraints) {
+    if (d->starfish_pointer) {
+        /* webOS has neither wp_pointer_warp_v1 nor pointer constraints; the
+         * starfish pointer moves the cursor, in global coordinates. */
+        wl_starfish_pointer_set_cursor_position(d->starfish_pointer,
+                                                (uint32_t)(window->x + x),
+                                                (uint32_t)(window->y + y));
+    } else if (d->wp_pointer_warp_v1 || d->pointer_constraints) {
         wl_list_for_each (seat, &d->seat_list, link) {
             if (wind == seat->pointer.focus) {
                 Wayland_SeatWarpMouse(seat, wind, x, y);
@@ -1348,6 +1355,11 @@ static bool Wayland_WarpMouseGlobal(float x, float y)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
     SDL_WaylandSeat *seat;
+
+    if (d->starfish_pointer) {
+        wl_starfish_pointer_set_cursor_position(d->starfish_pointer, (uint32_t)x, (uint32_t)y);
+        return true;
+    }
 
     if (d->wp_pointer_warp_v1 || d->pointer_constraints) {
         wl_list_for_each (seat, &d->seat_list, link) {

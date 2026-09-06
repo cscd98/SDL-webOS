@@ -50,6 +50,9 @@
 #include "alpha-modifier-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "webos-shell-client-protocol.h"
+#include "starfish-client-protocol.h"
+#include "webos-input-manager-client-protocol.h"
+#include "SDL_waylandwebos_abifix.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "frog-color-management-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
@@ -1323,6 +1326,20 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
         xdg_wm_base_add_listener(d->shell.xdg, &_xdg_wm_base_listener, NULL);
     } else if (SDL_strcmp(interface, "wl_shell") == 0) {
         d->shell.wl = wl_registry_bind(d->registry, id, &wl_shell_interface, 1);
+    } else if (SDL_strcmp(interface, "wl_webos_input_manager") == 0) {
+        /* Bind through LG's own interface: the published XML disagrees with
+         * what the compositor implements. */
+        const struct wl_interface *real_iface = WaylandWebOS_AbiFixInit() ? WaylandWebOS_GetInputManagerInterface() : NULL;
+        if (real_iface) {
+            d->webos_input_manager = wl_registry_bind(d->registry, id, real_iface, 1);
+        }
+    } else if (SDL_strcmp(interface, "wl_starfish_pointer") == 0) {
+        d->starfish_pointer = wl_registry_bind(d->registry, id, &wl_starfish_pointer_interface, 1);
+        /* Without this the magic remote pointer sleeps and stops delivering
+         * events, which also means no enter event and so no mouse focus. */
+        const char *sleep_hint = SDL_GetHint(SDL_HINT_WEBOS_CURSOR_SLEEP_TIME);
+        wl_starfish_pointer_set_mrcu_standby_timer(d->starfish_pointer,
+                                                   sleep_hint ? (uint32_t)SDL_atoi(sleep_hint) : 300000);
     } else if (SDL_strcmp(interface, "wl_webos_shell") == 0) {
         d->shell.webos = wl_registry_bind(d->registry, id, &wl_webos_shell_interface, SDL_min(version, 1));
     } else if (SDL_strcmp(interface, "wl_shm") == 0) {
@@ -1644,6 +1661,17 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
             wl_shm_destroy(data->shm);
         }
         data->shm = NULL;
+    }
+
+    if (data->webos_input_manager) {
+        wl_webos_input_manager_destroy(data->webos_input_manager);
+        data->webos_input_manager = NULL;
+    }
+    WaylandWebOS_AbiFixQuit();
+
+    if (data->starfish_pointer) {
+        wl_starfish_pointer_destroy(data->starfish_pointer);
+        data->starfish_pointer = NULL;
     }
 
     if (data->shell.webos) {
