@@ -4487,6 +4487,77 @@ extern "C" {
 #define SDL_HINT_WEBOS_CURSOR_SLEEP_TIME "SDL_WEBOS_CURSOR_SLEEP_TIME"
 
 /**
+ * Let the app handle the back key instead of opening the launcher strip.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_BACK "SDL_WEBOS_ACCESS_POLICY_KEYS_BACK"
+
+/**
+ * Let the app handle the exit key, which is a long press of back on magic remotes.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_EXIT "SDL_WEBOS_ACCESS_POLICY_KEYS_EXIT"
+
+/**
+ * Let the app handle the home key, reported as left super on a keyboard.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_HOME "SDL_WEBOS_ACCESS_POLICY_KEYS_HOME"
+
+/**
+ * Let the app handle the TV guide key.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_GUIDE "SDL_WEBOS_ACCESS_POLICY_KEYS_GUIDE"
+
+/**
+ * Let the app handle the meta key.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_META "SDL_WEBOS_ACCESS_POLICY_KEYS_META"
+
+/**
+ * Whether the launcher ribbon may appear over the app. Defaults to true.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_ACCESS_POLICY_RIBBON "SDL_WEBOS_ACCESS_POLICY_RIBBON"
+
+/**
+ * Whether the compositor restores the cursor position, disabling its own
+ * calibration.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_CURSOR_CALIBRATION_DISABLE "SDL_WEBOS_CURSOR_CALIBRATION_DISABLE"
+
+/**
+ * Whether to mark the surface as an active cloud game. Defaults to true.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_CLOUDGAME_ACTIVE "SDL_WEBOS_CLOUDGAME_ACTIVE"
+
+/**
+ * How often the compositor reports cursor movement, in frames per second.
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_CURSOR_FREQUENCY "SDL_WEBOS_CURSOR_FREQUENCY"
+
+/**
+ * Set the surface's _WEBOS_WINDOW_CLASS property when set to "1".
+ *
+ * This hint should be set before creating a window.
+ */
+#define SDL_HINT_WEBOS_WINDOW_CLASS "SDL_WEBOS_WINDOW_CLASS"
+
+/**
  * A variable controlling whether the window is activated when the
  * SDL_RaiseWindow function is called.
  *

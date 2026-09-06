@@ -32,6 +32,7 @@
 #include "SDL_waylandevents_c.h"
 #include "SDL_waylandmouse.h"
 #include "SDL_waylandwindow.h"
+#include "SDL_waylandwebos.h"
 #include "SDL_waylandvideo.h"
 #include "../../SDL_hints_c.h"
 #include "SDL_waylandcolor.h"
@@ -2716,47 +2717,12 @@ bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_W
     return false;
 }
 
-static void webos_shell_surface_state_changed(void *data, struct wl_webos_shell_surface *s, uint32_t state)
-{
-}
-
-static void webos_shell_surface_position_changed(void *data, struct wl_webos_shell_surface *s, int32_t x, int32_t y)
-{
-}
-
-static void webos_shell_surface_close(void *data, struct wl_webos_shell_surface *s)
-{
-    SDL_WindowData *wind = (SDL_WindowData *)data;
-
-    if (wind) {
-        SDL_SendWindowEvent(wind->sdlwindow, SDL_EVENT_WINDOW_CLOSE_REQUESTED, 0, 0);
-    }
-}
-
-static void webos_shell_surface_exposed(void *data, struct wl_webos_shell_surface *s, struct wl_array *rectangles)
-{
-}
-
-static void webos_shell_surface_state_about_to_change(void *data, struct wl_webos_shell_surface *s, uint32_t state)
-{
-}
-
-static const struct wl_webos_shell_surface_listener webos_shell_surface_listener = {
-    webos_shell_surface_state_changed,
-    webos_shell_surface_position_changed,
-    webos_shell_surface_close,
-    webos_shell_surface_exposed,
-    webos_shell_surface_state_about_to_change
-};
 
 /* webOS offers neither xdg-shell nor libdecor, so the role is assigned by hand.
- * Order matters: SDL2 does this before creating the EGL window and flushes plus
- * round-trips afterwards, so LSM has consumed the role and appId before the EGL
- * stack touches the surface. */
+ * Order matters: the role and its properties must reach the compositor before
+ * the EGL stack touches the surface, hence the flush and roundtrip. */
 static void WebOS_AssignShellRole(SDL_VideoData *c, SDL_Window *window, SDL_WindowData *data)
 {
-    const char *appid = SDL_getenv("APPID");
-
     data->shell_surface.webos.wl = wl_shell_get_shell_surface(c->shell.wl, data->surface);
     if (data->shell_surface.webos.wl) {
         wl_shell_surface_set_class(data->shell_surface.webos.wl, data->app_id);
@@ -2766,15 +2732,7 @@ static void WebOS_AssignShellRole(SDL_VideoData *c, SDL_Window *window, SDL_Wind
     if (c->shell.webos) {
         data->shell_surface.webos.webos = wl_webos_shell_get_shell_surface(c->shell.webos, data->surface);
         if (data->shell_surface.webos.webos) {
-            wl_webos_shell_surface_add_listener(data->shell_surface.webos.webos, &webos_shell_surface_listener, data);
-            wl_webos_shell_surface_set_user_data(data->shell_surface.webos.webos, data);
-            if (appid) {
-                wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "appId", appid);
-            }
-            wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "_WEBOS_ACCESS_POLICY_FORCESTRETCH", "true");
-            if (window->title) {
-                wl_webos_shell_surface_set_property(data->shell_surface.webos.webos, "title", window->title);
-            }
+            WaylandWebOS_SetupSurface(SDL_GetVideoDevice(), data);
         }
     }
 

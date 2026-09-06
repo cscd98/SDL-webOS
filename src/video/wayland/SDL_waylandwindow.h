@@ -72,6 +72,9 @@ struct SDL_WindowData
             struct wl_webos_shell_surface *webos;
         } webos;
     } shell_surface;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    Uint32 webos_shell_state;
+#endif
     enum
     {
         WAYLAND_SHELL_SURFACE_TYPE_UNKNOWN = 0,
