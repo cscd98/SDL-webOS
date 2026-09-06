@@ -676,6 +676,13 @@ macro(CheckWayland)
       set(HAVE_WAYLAND TRUE)
       set(HAVE_SDL_VIDEO TRUE)
 
+      if(SDL_WAYLAND_WEBOS)
+        set(HAVE_WAYLAND_WEBOS TRUE)
+        set(SDL_VIDEO_DRIVER_WAYLAND_WEBOS 1)
+        # The input-manager opcode rewrite is an awk pass over scanner output.
+        find_program(GAWK gawk REQUIRED)
+      endif()
+
       sdl_glob_sources("${SDL3_SOURCE_DIR}/src/video/wayland/*.c")
 
       # We have to generate some protocol interface code for some unstable Wayland features.

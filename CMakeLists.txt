@@ -356,6 +356,7 @@ dep_option(SDL_WAYLAND             "Use Wayland video driver" ${UNIX_SYS} "SDL_V
 dep_option(SDL_WAYLAND_SHARED      "Dynamically load Wayland support" ON "SDL_WAYLAND;SDL_DEPS_SHARED" OFF)
 dep_option(SDL_WAYLAND_LIBDECOR    "Use client-side window decorations on Wayland" ON "SDL_WAYLAND" OFF)
 dep_option(SDL_WAYLAND_LIBDECOR_SHARED     "Dynamically load libdecor support" ON "SDL_WAYLAND_LIBDECOR;SDL_WAYLAND_SHARED;SDL_DEPS_SHARED" OFF)
+dep_option(SDL_WAYLAND_WEBOS       "webOS Wayland server support for Wayland video driver" ON "SDL_WAYLAND;WEBOS" OFF)
 dep_option(SDL_RPI                 "Use Raspberry Pi video driver" ON "SDL_VIDEO;UNIX_SYS;SDL_CPU_ARM32 OR SDL_CPU_ARM64" OFF)
 dep_option(SDL_ROCKCHIP            "Use ROCKCHIP Hardware Acceleration video driver" ON "SDL_VIDEO;UNIX_SYS;SDL_CPU_ARM32 OR SDL_CPU_ARM64" OFF)
 dep_option(SDL_COCOA               "Use Cocoa video driver" ON "APPLE" OFF)
@@ -368,7 +369,12 @@ dep_option(SDL_RENDER_D3D12        "Enable the Direct3D 12 render driver" ON "SD
 dep_option(SDL_RENDER_METAL        "Enable the Metal render driver" ON "SDL_RENDER;APPLE" OFF)
 dep_option(SDL_RENDER_GPU          "Enable the SDL_GPU render driver" ON "SDL_RENDER;SDL_GPU" OFF)
 dep_option(SDL_VIVANTE             "Use Vivante EGL video driver" ON "${UNIX_SYS};SDL_CPU_ARM32" OFF)
-dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR OPENBSD OR WINDOWS" OFF)
+dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR OPENBSD OR WINDOWS;NOT WEBOS" OFF)
+
+if(WEBOS)
+  set_option(SDL_WEBOS_BROKEN_ABI     "Build against webOS's modified SDL2 ABI" OFF)
+  set_option(SDL_WEBOS_HAVE_LIBHELPER "Use libhelpers for Luna service calls" ON)
+endif()
 dep_option(SDL_RENDER_VULKAN       "Enable the Vulkan render driver" ON "SDL_RENDER;SDL_VULKAN" OFF)
 dep_option(SDL_METAL               "Enable Metal support" ON "APPLE" OFF)
 set_option(SDL_OPENVR              "Use OpenVR video driver" OFF)
@@ -2076,6 +2082,14 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
         "${SDL3_SOURCE_DIR}/src/joystick/linux/*.c"
         "${SDL3_SOURCE_DIR}/src/joystick/linux/*.h"
       )
+      if(WEBOS)
+        # Device presence polling and the netlink uevent monitor, used by both
+        # the joystick backend and hidapi, since the app jail has no udev.
+        sdl_glob_sources(
+          "${SDL3_SOURCE_DIR}/src/joystick/webos/*.c"
+          "${SDL3_SOURCE_DIR}/src/joystick/webos/*.h"
+        )
+      endif()
       set(HAVE_SDL_JOYSTICK TRUE)
     endif()
   endif()
@@ -2109,9 +2123,27 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/locale/unix/*.c")
   set(HAVE_SDL_LOCALE TRUE)
 
-  set(SDL_FILESYSTEM_UNIX 1)
-  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/unix/*.c")
+  if(WEBOS)
+    set(SDL_FILESYSTEM_WEBOS 1)
+    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/webos/*.c")
+  else()
+    set(SDL_FILESYSTEM_UNIX 1)
+    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/unix/*.c")
+  endif()
   set(HAVE_SDL_FILESYSTEM TRUE)
+
+  if(WEBOS)
+    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/core/webos/*.c")
+    # PUBLIC so tests and consumers agree with the library about the platform.
+    sdl_compile_definitions(PUBLIC "__WEBOS__")
+
+    if(SDL_WEBOS_BROKEN_ABI)
+      set(HAVE_WEBOS_BROKEN_ABI 1)
+    endif()
+    if(SDL_WEBOS_HAVE_LIBHELPER)
+      sdl_compile_definitions(PRIVATE "SDL_WEBOS_HAVE_LIBHELPER=1")
+    endif()
+  endif()
 
   set(SDL_STORAGE_GENERIC 1)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/storage/generic/*.c")
