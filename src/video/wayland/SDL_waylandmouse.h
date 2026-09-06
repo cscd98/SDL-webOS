@@ -31,6 +31,9 @@ extern void Wayland_SeatResetCursor(SDL_WaylandSeat *seat);
 extern void Wayland_DisplayUpdatePointerFocusedScale(SDL_WindowData *updated_window);
 extern void Wayland_TabletToolUpdateCursor(SDL_WaylandPenTool *tool);
 extern void Wayland_SeatWarpMouse(SDL_WaylandSeat *seat, SDL_WindowData *window, float x, float y);
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+extern void Wayland_WebOSWarpPointerGlobal(SDL_VideoData *display, float x, float y);
+#endif
 extern void Wayland_CursorStateSetFrameCallback(SDL_WaylandCursorState *state, void *userdata);
 extern void Wayland_CursorStateDestroyFrameCallback(SDL_WaylandCursorState *state);
 extern void Wayland_CursorStateRelease(SDL_WaylandCursorState *state);

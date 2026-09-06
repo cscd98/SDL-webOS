@@ -680,6 +680,61 @@ connection_error:
     }
 }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+/* webOS implements no relative pointer protocol, so relative motion is the difference
+ * between two absolute positions, and the pointer is warped back to the center of the
+ * display after every motion so that it never reaches a screen edge and stops moving.
+ *
+ * The warp generates a motion event of its own, which carries no motion of the user's
+ * and is dropped.
+ *
+ * Returns true if the motion was consumed as relative motion.
+ */
+static bool Wayland_SeatEmulateRelativeMotion(SDL_WaylandSeat *seat, float sx, float sy)
+{
+    SDL_WindowData *window_data = seat->pointer.focus;
+    SDL_Window *window = window_data->sdlwindow;
+    SDL_Rect bounds;
+
+    if (!seat->display->starfish_pointer || seat->display->relative_pointer_manager ||
+        !(window->flags & SDL_WINDOW_MOUSE_RELATIVE_MODE)) {
+        return false;
+    }
+
+    if (seat->pointer.relative_emulation.warping) {
+        seat->pointer.relative_emulation.warping = false;
+    } else if (seat->pointer.relative_emulation.have_position) {
+        const float dx = sx - seat->pointer.relative_emulation.position.x;
+        const float dy = sy - seat->pointer.relative_emulation.position.y;
+
+        SDL_SendMouseMotion(seat->pointer.pending_frame.timestamp_ns, window, seat->pointer.sdl_id, true, dx, dy);
+
+        /* The starfish pointer position is always relative to the screen, not the window,
+         * even if the window is smaller or scaled.
+         */
+        if (SDL_GetDisplayBounds(SDL_GetDisplayForWindow(window), &bounds)) {
+            seat->pointer.relative_emulation.warping = true;
+            Wayland_WebOSWarpPointerGlobal(seat->display, (float)(bounds.x + bounds.w / 2), (float)(bounds.y + bounds.h / 2));
+        }
+    }
+
+    seat->pointer.relative_emulation.position.x = sx;
+    seat->pointer.relative_emulation.position.y = sy;
+    seat->pointer.relative_emulation.have_position = true;
+
+    return true;
+}
+
+void Wayland_DisplayResetEmulatedRelativeMotion(SDL_VideoData *display)
+{
+    SDL_WaylandSeat *seat;
+
+    wl_list_for_each (seat, &display->seat_list, link) {
+        SDL_zero(seat->pointer.relative_emulation);
+    }
+}
+#endif
+
 static void pointer_dispatch_absolute_motion(SDL_WaylandSeat *seat)
 {
     SDL_WindowData *window_data = seat->pointer.focus;
@@ -688,6 +743,12 @@ static void pointer_dispatch_absolute_motion(SDL_WaylandSeat *seat)
     if (window_data) {
         const float sx = (float)(wl_fixed_to_double(seat->pointer.pending_frame.absolute.sx) * window_data->pointer_scale.x);
         const float sy = (float)(wl_fixed_to_double(seat->pointer.pending_frame.absolute.sy) * window_data->pointer_scale.y);
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+        if (Wayland_SeatEmulateRelativeMotion(seat, sx, sy)) {
+            return;
+        }
+#endif
+
         SDL_SendMouseMotion(seat->pointer.pending_frame.timestamp_ns, window_data->sdlwindow, seat->pointer.sdl_id, false, sx, sy);
 
         seat->pointer.last_motion.x = (int)SDL_floorf(sx);
@@ -817,6 +878,9 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
     SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
     seat->pointer.focus = window;
     seat->pointer.enter_serial = serial;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_zero(seat->pointer.relative_emulation);
+#endif
     ++window->pointer_focus_count;
     SDL_SetMouseFocus(window->sdlwindow);
 
@@ -875,6 +939,9 @@ static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
 
     SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
     seat->pointer.focus = NULL;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    SDL_zero(seat->pointer.relative_emulation);
+#endif
     for (int i = 1; seat->pointer.buttons_pressed; ++i) {
         if (seat->pointer.buttons_pressed & SDL_BUTTON_MASK(i)) {
             SDL_SendMouseButton(0, window->sdlwindow, seat->pointer.sdl_id, i, false);

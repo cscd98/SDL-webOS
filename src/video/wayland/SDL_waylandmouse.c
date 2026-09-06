@@ -1272,10 +1272,26 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
     return true;
 }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+/* webOS has neither wp_pointer_warp_v1 nor pointer constraints; the starfish
+ * pointer moves the cursor, and always in global coordinates. */
+void Wayland_WebOSWarpPointerGlobal(SDL_VideoData *d, float x, float y)
+{
+    wl_starfish_pointer_set_cursor_position(d->starfish_pointer, (uint32_t)x, (uint32_t)y);
+}
+#endif
+
 void Wayland_SeatWarpMouse(SDL_WaylandSeat *seat, SDL_WindowData *window, float x, float y)
 {
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (d->starfish_pointer) {
+        Wayland_WebOSWarpPointerGlobal(d, window->sdlwindow->x + x, window->sdlwindow->y + y);
+        return;
+    }
+#endif
 
     if (seat->pointer.wl_pointer) {
         if (d->wp_pointer_warp_v1) {
@@ -1336,11 +1352,7 @@ static bool Wayland_WarpMouseRelative(SDL_Window *window, float x, float y)
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     if (d->starfish_pointer) {
-        /* webOS has neither wp_pointer_warp_v1 nor pointer constraints; the
-         * starfish pointer moves the cursor, in global coordinates. */
-        wl_starfish_pointer_set_cursor_position(d->starfish_pointer,
-                                                (uint32_t)(window->x + x),
-                                                (uint32_t)(window->y + y));
+        Wayland_WebOSWarpPointerGlobal(d, window->x + x, window->y + y);
     } else
 #endif
     if (d->wp_pointer_warp_v1 || d->pointer_constraints) {
@@ -1364,7 +1376,7 @@ static bool Wayland_WarpMouseGlobal(float x, float y)
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
     if (d->starfish_pointer) {
-        wl_starfish_pointer_set_cursor_position(d->starfish_pointer, (uint32_t)x, (uint32_t)y);
+        Wayland_WebOSWarpPointerGlobal(d, x, y);
         return true;
     }
 #endif
@@ -1400,6 +1412,16 @@ static bool Wayland_SetRelativeMouseMode(bool enabled)
 {
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *data = vd->internal;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* webOS has no relative pointer protocol at all, so motion is estimated from
+     * successive absolute positions and the pointer is recentered as it travels.
+     */
+    if (!data->relative_pointer_manager && data->starfish_pointer) {
+        Wayland_DisplayResetEmulatedRelativeMotion(data);
+        return true;
+    }
+#endif
 
     // Relative mode requires both the relative motion and pointer confinement protocols.
     if (!data->relative_pointer_manager) {

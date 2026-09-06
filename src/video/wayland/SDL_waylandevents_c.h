@@ -202,6 +202,16 @@ typedef struct SDL_WaylandSeat
         SDL_Point last_motion;
         bool is_confined;
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+        // Reference position for relative motion estimated from absolute positions.
+        struct
+        {
+            SDL_FPoint position;
+            bool have_position;
+            bool warping;
+        } relative_emulation;
+#endif
+
         SDL_MouseID sdl_id;
 
         // Information about axis events on the current frame
@@ -291,6 +301,9 @@ extern void Wayland_SeatUpdatePointerGrab(SDL_WaylandSeat *seat);
 extern void Wayland_DisplayUpdatePointerGrabs(SDL_VideoData *display, SDL_WindowData *window);
 extern void Wayland_DisplayUpdateKeyboardGrabs(SDL_VideoData *display, SDL_WindowData *window);
 extern void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *display, SDL_WindowData *window);
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+extern void Wayland_DisplayResetEmulatedRelativeMotion(SDL_VideoData *display);
+#endif
 
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up
