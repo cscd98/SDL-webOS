@@ -513,7 +513,8 @@ static int SDLCALL mouse_getMouseFocus(void *arg)
     SDL_Window *window;
     SDL_Window *focusWindow;
     const char *xdg_session = SDL_getenv("XDG_SESSION_TYPE");
-    const bool env_is_wayland = !SDL_strcmp(xdg_session ? xdg_session : "", "wayland");
+    const bool session_is_wayland = !SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") ||
+                                    !SDL_strcmp(xdg_session ? xdg_session : "", "wayland");
 
     /* Get focus - focus non-deterministic */
     focusWindow = SDL_GetMouseFocus();
@@ -529,7 +530,7 @@ static int SDLCALL mouse_getMouseFocus(void *arg)
     SDL_Delay(100);
 
     /* Warping the pointer when it is outside the window on a Wayland desktop usually doesn't work, so this test will be skipped. */
-    if (!env_is_wayland) {
+    if (!session_is_wayland) {
         /* Mouse to random position inside window */
         x = (float)SDLTest_RandomIntegerInRange(1, w - 1);
         y = (float)SDLTest_RandomIntegerInRange(1, h - 1);
