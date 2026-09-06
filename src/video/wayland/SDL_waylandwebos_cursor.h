@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,27 +20,23 @@
 */
 #include "SDL_internal.h"
 
-#ifdef SDL_PLATFORM_WEBOS
-
-#include "../../video/SDL_sysvideo.h"
+#ifndef SDL_waylandwebos_cursor_h_
+#define SDL_waylandwebos_cursor_h_
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
-#include "../../video/wayland/SDL_waylandwebos_cursor.h"
-#endif
 
-bool SDL_webOSCursorVisibility(bool visible)
-{
-#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
-    SDL_VideoDevice *_this = SDL_GetVideoDevice();
+/* webOS has no cursor theme. The compositor draws its own images, kept as PNGs
+ * under /usr/share/im and sized by the pointerSize accessibility setting.
+ * Returns NULL for a cursor LG has no image for. */
+extern SDL_Surface *WaylandWebOS_LoadSystemCursorSurface(SDL_SystemCursor id);
 
-    if (_this && SDL_strcmp(_this->name, "wayland") == 0 && WaylandWebOS_SetCursorVisibility(visible)) {
-        return true;
-    }
-#else
-    (void)visible;
-#endif
+/* Hides or shows the compositor's own pointer, which works whether or not the
+ * pointer has entered one of our surfaces. Returns false if the input manager
+ * is unavailable; the caller reports the error. */
+extern bool WaylandWebOS_SetCursorVisibility(bool visible);
 
-    return SDL_SetError("Failed to set cursor visibility: the current mouse driver does not support it");
-}
+extern void WaylandWebOS_FiniCursor(void);
 
-#endif // SDL_PLATFORM_WEBOS
+#endif // SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+
+#endif // SDL_waylandwebos_cursor_h_

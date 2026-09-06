@@ -32,6 +32,7 @@
 static SDL_SharedObject *webos_client_lib = NULL;
 static const struct wl_interface *input_manager_interface = NULL;
 static int opcode_get_webos_seat = -1;
+static int opcode_set_cursor_visibility = -1;
 
 static int FindOpcode(const struct wl_interface *iface, const char *request)
 {
@@ -68,6 +69,7 @@ bool WaylandWebOS_AbiFixInit(void)
     }
 
     opcode_get_webos_seat = FindOpcode(input_manager_interface, "get_webos_seat");
+    opcode_set_cursor_visibility = FindOpcode(input_manager_interface, "set_cursor_visibility");
 
     return true;
 }
@@ -76,6 +78,7 @@ void WaylandWebOS_AbiFixQuit(void)
 {
     input_manager_interface = NULL;
     opcode_get_webos_seat = -1;
+    opcode_set_cursor_visibility = -1;
 
     if (webos_client_lib) {
         SDL_UnloadObject(webos_client_lib);
@@ -101,6 +104,19 @@ struct wl_webos_seat *WaylandWebOS_GetWebOSSeat(struct wl_webos_input_manager *m
                                                                 (uint32_t)opcode_get_webos_seat,
                                                                 &wl_webos_seat_interface,
                                                                 NULL, seat);
+}
+
+bool WaylandWebOS_SetInputManagerCursorVisibility(struct wl_webos_input_manager *manager, bool visible)
+{
+    if (!manager || opcode_set_cursor_visibility < 0) {
+        return false;
+    }
+
+    /* Equivalent to the generated wl_webos_input_manager_set_cursor_visibility(),
+     * but with the opcode this compositor actually uses. */
+    wl_proxy_marshal((struct wl_proxy *)manager, (uint32_t)opcode_set_cursor_visibility, (uint32_t)visible);
+
+    return true;
 }
 
 #endif // SDL_VIDEO_DRIVER_WAYLAND_WEBOS

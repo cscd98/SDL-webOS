@@ -54,6 +54,10 @@ extern const struct wl_interface *WaylandWebOS_GetInputManagerInterface(void);
 extern struct wl_webos_seat *WaylandWebOS_GetWebOSSeat(struct wl_webos_input_manager *manager,
                                                        struct wl_seat *seat);
 
+/* Marshals set_cursor_visibility the same way. Returns false if the request is
+ * unavailable. */
+extern bool WaylandWebOS_SetInputManagerCursorVisibility(struct wl_webos_input_manager *manager, bool visible);
+
 #endif // SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 
 #endif // SDL_waylandwebos_abifix_h_

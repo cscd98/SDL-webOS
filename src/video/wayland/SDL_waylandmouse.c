@@ -46,11 +46,15 @@
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 #include "starfish-client-protocol.h"
+#include "SDL_waylandwebos_cursor.h"
 #endif
 
 #include "../../SDL_hints_c.h"
 
 static SDL_Cursor *sys_cursors[SDL_HITTEST_RESIZE_LEFT + 1];
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+static SDL_Cursor *webos_hidden_cursor;
+#endif
 
 static bool Wayland_SetRelativeMouseMode(bool enabled);
 
@@ -874,6 +878,19 @@ static SDL_Cursor *Wayland_CreateCursor(SDL_Surface *surface, int hot_x, int hot
 
 static SDL_Cursor *Wayland_CreateSystemCursor(SDL_SystemCursor id)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* LG's images are ordinary bitmaps, so they become custom cursors; the
+     * system cursor path here needs a wl_cursor theme, which webOS has none of. */
+    SDL_Surface *webos_surface = WaylandWebOS_LoadSystemCursorSurface(id);
+    if (webos_surface) {
+        SDL_Cursor *webos_cursor = Wayland_CreateCursor(webos_surface, 0, 0);
+        SDL_DestroySurface(webos_surface);
+        if (webos_cursor) {
+            return webos_cursor;
+        }
+    }
+#endif
+
     SDL_Cursor *cursor = SDL_calloc(1, sizeof(*cursor));
 
     if (cursor) {
@@ -891,6 +908,27 @@ static SDL_Cursor *Wayland_CreateSystemCursor(SDL_SystemCursor id)
 
     return cursor;
 }
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+/* The compositor rejects a NULL cursor surface, so hiding the cursor means
+ * attaching a fully transparent one. SDL_QuitMouse() runs before the video
+ * backend is torn down, so this is freed with the rest of the driver's cursors
+ * in Wayland_FiniMouse() rather than through SDL_Mouse. */
+static SDL_Cursor *Wayland_WebOSObtainHiddenCursor(void)
+{
+    if (!webos_hidden_cursor) {
+        SDL_Surface *surface = SDL_CreateSurface(1, 1, SDL_PIXELFORMAT_ARGB8888);
+        if (!surface) {
+            return NULL;
+        }
+        SDL_memset(surface->pixels, 0, (size_t)surface->h * surface->pitch);
+        webos_hidden_cursor = Wayland_CreateCursor(surface, 0, 0);
+        SDL_DestroySurface(surface);
+    }
+
+    return webos_hidden_cursor;
+}
+#endif
 
 static SDL_Cursor *Wayland_CreateDefaultCursor(void)
 {
@@ -1053,6 +1091,13 @@ typedef struct Wayland_PointerObject
 static void Wayland_CursorStateSetCursor(SDL_WaylandCursorState *state, const Wayland_PointerObject *obj, SDL_WindowData *focus, Uint32 serial, SDL_Cursor *cursor)
 {
     SDL_VideoData *viddata = SDL_GetVideoDevice()->internal;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (!cursor) {
+        cursor = Wayland_WebOSObtainHiddenCursor();
+    }
+#endif
+
     SDL_CursorData *cursor_data = cursor ? cursor->internal : NULL;
     int dst_width = 0;
     int dst_height = 0;
@@ -1241,6 +1286,13 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
     SDL_Mouse *mouse = SDL_GetMouse();
     SDL_WaylandSeat *seat;
     Wayland_PointerObject obj;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* The compositor draws the pointer itself. Ask it directly, since the seats
+     * below are only reached once one of them has entered a surface, and
+     * SDL_RedrawCursor() only passes NULL while a window has mouse focus. */
+    WaylandWebOS_SetCursorVisibility(mouse->cursor_visible);
+#endif
 
     wl_list_for_each (seat, &d->seat_list, link) {
         if (seat->pointer.wl_pointer) {
@@ -1607,6 +1659,12 @@ void Wayland_FiniMouse(SDL_VideoData *data)
         sys_cursors[i] = NULL;
     }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    Wayland_FreeCursor(webos_hidden_cursor);
+    webos_hidden_cursor = NULL;
+    WaylandWebOS_FiniCursor();
+#endif
+
     Wayland_DestroyCursorThread(data);
     Wayland_FreeCursorThemes(data);
 
@@ -1625,11 +1683,17 @@ void Wayland_SeatUpdatePointerCursor(SDL_WaylandSeat *seat)
     };
 
     if (pointer_focus) {
+        bool relative = seat->pointer.relative_pointer != NULL;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+        // webOS emulates relative mode, so there is no relative pointer object to test.
+        relative |= seat->display->starfish_pointer && (pointer_focus->sdlwindow->flags & SDL_WINDOW_MOUSE_RELATIVE_MODE);
+#endif
+
         if (mouse->cursor_visible) {
-            if (!seat->pointer.relative_pointer || !mouse->relative_mode_hide_cursor) {
+            if (!relative || !mouse->relative_mode_hide_cursor) {
                 const SDL_HitTestResult rc = pointer_focus->hit_test_result;
 
-                if (seat->pointer.relative_pointer || rc == SDL_HITTEST_NORMAL || rc == SDL_HITTEST_DRAGGABLE) {
+                if (relative || rc == SDL_HITTEST_NORMAL || rc == SDL_HITTEST_DRAGGABLE) {
                     Wayland_CursorStateSetCursor(&seat->pointer.cursor_state, &obj, pointer_focus, seat->pointer.enter_serial, mouse->cur_cursor);
                 } else {
                     Wayland_CursorStateSetCursor(&seat->pointer.cursor_state, &obj, pointer_focus, seat->pointer.enter_serial, sys_cursors[rc]);
