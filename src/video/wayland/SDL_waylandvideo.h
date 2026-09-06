@@ -71,6 +71,22 @@ struct SDL_VideoData
      * pointer is how the cursor is moved there. */
     struct wl_starfish_pointer *starfish_pointer;
     struct wl_webos_input_manager *webos_input_manager;
+
+    /* LG's pre-standard text protocol, in place of zwp_text_input_v3. The input
+     * panel is a single system-wide object, so one model serves the whole
+     * display and is activated on the seat that holds the keyboard focus. */
+    struct
+    {
+        struct text_model_factory *factory;
+        struct text_model *model;
+        struct SDL_WaylandSeat *seat;
+        SDL_WindowData *window;
+        SDL_Rect cursor_rect;
+        Uint32 serial;
+        int cursor_offset;
+        int preedit_cursor;
+        bool has_preedit;
+    } webos_text_input;
 #endif
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
     struct zwp_pointer_constraints_v1 *pointer_constraints;

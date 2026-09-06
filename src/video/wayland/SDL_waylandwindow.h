@@ -202,6 +202,9 @@ struct SDL_WindowData
     {
         int hint;
         int purpose;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+        int enter_key_type;
+#endif
         bool active;
     } text_input_props;
 

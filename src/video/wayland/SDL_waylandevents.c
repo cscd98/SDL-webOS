@@ -52,6 +52,7 @@
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 #include "webos-input-manager-client-protocol.h"
 #include "SDL_waylandwebos_abifix.h"
+#include "SDL_waylandwebos_osk.h"
 #endif
 
 #ifdef HAVE_LIBDECOR_H
@@ -3786,6 +3787,10 @@ void Wayland_SeatDestroy(SDL_WaylandSeat *seat, bool shutting_down)
     if (seat->text_input.zwp_text_input) {
         zwp_text_input_v3_destroy(seat->text_input.zwp_text_input);
     }
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    WaylandWebOS_SeatDestroyed(seat->display, seat);
+#endif
 
     Wayland_SeatDestroyKeyboard(seat);
     Wayland_SeatDestroyPointer(seat);

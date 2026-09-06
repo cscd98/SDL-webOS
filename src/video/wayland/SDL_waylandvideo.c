@@ -52,6 +52,7 @@
 #include "starfish-client-protocol.h"
 #include "webos-input-manager-client-protocol.h"
 #include "SDL_waylandwebos_abifix.h"
+#include "SDL_waylandwebos_osk.h"
 #endif
 
 #include "alpha-modifier-v1-client-protocol.h"
@@ -717,6 +718,11 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
     device->StartTextInput = Wayland_StartTextInput;
     device->StopTextInput = Wayland_StopTextInput;
     device->UpdateTextInputArea = Wayland_UpdateTextInputArea;
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    device->ClearComposition = WaylandWebOS_ClearComposition;
+    device->ShowScreenKeyboard = WaylandWebOS_ShowScreenKeyboard;
+    device->HideScreenKeyboard = WaylandWebOS_HideScreenKeyboard;
+#endif
 
 #ifdef SDL_VIDEO_VULKAN
     device->Vulkan_LoadLibrary = Wayland_Vulkan_LoadLibrary;
@@ -1346,6 +1352,8 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
                                                    sleep_hint ? (uint32_t)SDL_atoi(sleep_hint) : 300000);
     } else if (SDL_strcmp(interface, "wl_webos_shell") == 0) {
         d->shell.webos = wl_registry_bind(d->registry, id, &wl_webos_shell_interface, SDL_min(version, 1));
+    } else if (SDL_strcmp(interface, "text_model_factory") == 0) {
+        WaylandWebOS_DisplayInitTextModelFactory(d, id);
 #endif
     } else if (SDL_strcmp(interface, "wl_shm") == 0) {
         d->shm = wl_registry_bind(registry, id, &wl_shm_interface, SDL_min(SDL_WL_SHM_VERSION, version));
@@ -1674,6 +1682,8 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
     }
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    WaylandWebOS_QuitTextInput(data);
+
     if (data->webos_input_manager) {
         wl_webos_input_manager_destroy(data->webos_input_manager);
         data->webos_input_manager = NULL;

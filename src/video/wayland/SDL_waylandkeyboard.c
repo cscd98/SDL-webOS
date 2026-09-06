@@ -28,6 +28,10 @@
 #include "../../events/SDL_keyboard_c.h"
 #include "text-input-unstable-v3-client-protocol.h"
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+#include "SDL_waylandwebos_osk.h"
+#endif
+
 bool Wayland_InitKeyboard(SDL_VideoDevice *_this)
 {
 #ifdef SDL_USE_IME
@@ -53,6 +57,13 @@ void Wayland_QuitKeyboard(SDL_VideoDevice *_this)
 
 void Wayland_SeatUpdateTextInput(SDL_WaylandSeat *seat)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (seat->display->webos_text_input.factory) {
+        WaylandWebOS_UpdateTextInput(seat->display);
+        return;
+    }
+#endif
+
     if (seat->text_input.zwp_text_input) {
         SDL_WindowData *focus = seat->keyboard.focus;
 
@@ -112,6 +123,12 @@ void Wayland_SeatUpdateTextInput(SDL_WaylandSeat *seat)
 bool Wayland_StartTextInput(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID props)
 {
     SDL_VideoData *display = _this->internal;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (display->webos_text_input.factory) {
+        return WaylandWebOS_StartTextInput(_this, window, props);
+    }
+#endif
 
     if (display->text_input_manager) {
         SDL_WindowData *wind = window->internal;
@@ -195,6 +212,12 @@ bool Wayland_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_VideoData *display = _this->internal;
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (display->webos_text_input.factory) {
+        return WaylandWebOS_StopTextInput(_this, window);
+    }
+#endif
+
     if (display->text_input_manager) {
         SDL_WaylandSeat *seat;
         SDL_WindowData *wind = window->internal;
@@ -218,6 +241,13 @@ bool Wayland_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
 bool Wayland_UpdateTextInputArea(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_VideoData *internal = _this->internal;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (internal->webos_text_input.factory) {
+        return WaylandWebOS_UpdateTextInputArea(_this, window);
+    }
+#endif
+
     if (internal->text_input_manager) {
         SDL_WaylandSeat *seat;
         SDL_WindowData *wind = window->internal;
@@ -265,6 +295,14 @@ bool Wayland_HasScreenKeyboardSupport(SDL_VideoDevice *_this)
     SDL_WaylandSeat *seat;
     bool hastextmanager = (internal->text_input_manager != NULL);
     bool haskeyboard = false;
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* The remote is advertised as a keyboard, but the input panel is the only
+     * way to enter text with it. */
+    if (internal->webos_text_input.factory) {
+        return true;
+    }
+#endif
 
     // Check for at least one keyboard object on one seat.
     wl_list_for_each (seat, &internal->seat_list, link) {

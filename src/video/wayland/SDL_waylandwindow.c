@@ -51,6 +51,7 @@
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
 #include "SDL_waylandwebos.h"
+#include "SDL_waylandwebos_osk.h"
 #include "webos-shell-client-protocol.h"
 #endif
 
@@ -3390,6 +3391,10 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
          * to the window held by seats are released before destroying the underlying surface and struct.
          */
         Wayland_DisplayRemoveWindowReferencesFromSeats(data, wind);
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+        WaylandWebOS_WindowDestroyed(data, wind);
+#endif
 
 #ifdef SDL_VIDEO_OPENGL_EGL
         if (wind->egl_surface) {
