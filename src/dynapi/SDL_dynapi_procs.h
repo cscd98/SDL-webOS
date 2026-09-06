@@ -1305,3 +1305,14 @@ SDL_DYNAPI_PROC(SDL_Surface*,SDL_RotateSurface,(SDL_Surface *a,float b),(a,b),re
 SDL_DYNAPI_PROC(SDL_Surface*,SDL_LoadSurface_IO,(SDL_IOStream *a,bool b),(a,b),return)
 SDL_DYNAPI_PROC(SDL_Surface*,SDL_LoadSurface,(const char *a),(a),return)
 SDL_DYNAPI_PROC(bool,SDL_SetWindowFillDocument,(SDL_Window *a,bool b),(a,b),return)
+
+#ifdef SDL_PLATFORM_WEBOS
+SDL_DYNAPI_PROC(bool,SDL_webOSCursorVisibility,(bool a),(a),return)
+SDL_DYNAPI_PROC(bool,SDL_webOSGetPanelResolution,(int *a,int *b),(a,b),return)
+SDL_DYNAPI_PROC(bool,SDL_webOSGetRefreshRate,(int *a),(a),return)
+SDL_DYNAPI_PROC(const char*,SDL_webOSCreateExportedWindow,(SDL_webOSExportedWindowType a),(a),return)
+SDL_DYNAPI_PROC(bool,SDL_webOSSetExportedWindow,(const char *a,SDL_Rect *b,SDL_Rect *c),(a,b,c),return)
+SDL_DYNAPI_PROC(bool,SDL_webOSExportedSetCropRegion,(const char *a,SDL_Rect *b,SDL_Rect *c,SDL_Rect *d),(a,b,c,d),return)
+SDL_DYNAPI_PROC(bool,SDL_webOSExportedSetProperty,(const char *a,const char *b,const char *c),(a,b,c),return)
+SDL_DYNAPI_PROC(void,SDL_webOSDestroyExportedWindow,(const char *a),(a),)
+#endif

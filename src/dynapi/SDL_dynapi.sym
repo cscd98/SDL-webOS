@@ -1271,6 +1271,14 @@ SDL3_0.0.0 {
     SDL_LoadSurface_IO;
     SDL_LoadSurface;
     SDL_SetWindowFillDocument;
+    SDL_webOSCursorVisibility;
+    SDL_webOSGetPanelResolution;
+    SDL_webOSGetRefreshRate;
+    SDL_webOSCreateExportedWindow;
+    SDL_webOSSetExportedWindow;
+    SDL_webOSExportedSetCropRegion;
+    SDL_webOSExportedSetProperty;
+    SDL_webOSDestroyExportedWindow;
     # extra symbols go here (don't modify this line)
   local: *;
 };

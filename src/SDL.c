@@ -30,6 +30,11 @@
 // this checks for HAVE_DBUS_DBUS_H internally.
 #include "core/linux/SDL_dbus.h"
 
+#ifdef SDL_PLATFORM_WEBOS
+#include "core/webos/SDL_webos_init.h"
+#include "core/webos/SDL_webos_libs.h"
+#endif
+
 #if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID)
 #include "core/unix/SDL_gtk.h"
 #endif
@@ -196,6 +201,9 @@ static SDL_ThreadID SDL_EventsThreadID = 0;
 static SDL_ThreadID SDL_VideoThreadID = 0;
 static bool SDL_bInMainQuit = false;
 static Uint8 SDL_SubsystemRefCount[32];
+#ifdef SDL_PLATFORM_WEBOS
+static bool SDL_WebOSInitCalled = false;
+#endif
 
 // Private helper to increment a subsystem's ref counter.
 static void SDL_IncrementSubsystemRefCount(Uint32 subsystem)
@@ -358,6 +366,23 @@ bool SDL_InitSubSystem(SDL_InitFlags flags)
 
 #ifdef SDL_USE_LIBDBUS
     SDL_DBus_Init();
+#endif
+
+#ifdef SDL_PLATFORM_WEBOS
+    if (!SDL_webOSLoadLibraries()) {
+        return SDL_SetError("Failed to load webOS libraries");
+    }
+    if (!SDL_WebOSInitCalled) {
+        SDL_WebOSInitCalled = true;
+#ifdef SDL_WEBOS_HAVE_LIBHELPER
+        SDL_webOSInitLSHandle();
+        if (!SDL_webOSAppRegistered()) {
+            if (!SDL_webOSRegisterApp()) {
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to register app: %s", SDL_GetError());
+            }
+        }
+#endif
+    }
 #endif
 
 #ifdef SDL_PLATFORM_WINDOWS
@@ -715,6 +740,14 @@ void SDL_Quit(void)
 
 #ifdef SDL_USE_LIBDBUS
     SDL_DBus_Quit();
+#endif
+
+#ifdef SDL_PLATFORM_WEBOS
+#ifdef SDL_WEBOS_HAVE_LIBHELPER
+    SDL_webOSUnregisterApp();
+#endif
+    SDL_webOSUnloadLibraries();
+    SDL_WebOSInitCalled = false;
 #endif
 
 #if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_EMSCRIPTEN) && !defined(SDL_PLATFORM_PRIVATE)

@@ -4437,6 +4437,25 @@ extern "C" {
 #define SDL_HINT_WAVE_TRUNCATION "SDL_WAVE_TRUNCATION"
 
 /**
+ * A variable controlling whether SDL registers the app with the webOS
+ * application manager.
+ *
+ * Registration is what lets SDL learn about relaunch and close requests, and
+ * about screensaver and power state changes, so an app that turns it off is
+ * expected to drive its own lifecycle.
+ *
+ * The variable can be set to the following values:
+ *
+ * - "0": SDL will not make the registration Luna calls.
+ * - "1": SDL will register the app on init. (default)
+ *
+ * This hint should be set before SDL is initialized.
+ *
+ * \since This hint is available since SDL 3.4.0.
+ */
+#define SDL_HINT_WEBOS_REGISTER_APP "SDL_WEBOS_REGISTER_APP"
+
+/**
  * A variable controlling whether the window is activated when the
  * SDL_RaiseWindow function is called.
  *

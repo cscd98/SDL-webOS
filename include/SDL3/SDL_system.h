@@ -831,6 +831,135 @@ extern SDL_DECLSPEC bool SDLCALL SDL_GetGDKDefaultUser(XUserHandle *outUserHandl
 
 #endif
 
+#ifdef SDL_PLATFORM_WEBOS
+
+/**
+ * The kind of surface an exported window punches into the webOS compositor.
+ *
+ * \since This enum is available since SDL 3.4.0.
+ *
+ * \sa SDL_webOSCreateExportedWindow
+ */
+typedef enum SDL_webOSExportedWindowType
+{
+    SDL_WEBOS_EXPORTED_WINDOW_TYPE_VIDEO = 0,       /**< A video plane, punched through by the video pipeline. */
+    SDL_WEBOS_EXPORTED_WINDOW_TYPE_SUBTITLE = 1,    /**< A subtitle overlay. */
+    SDL_WEBOS_EXPORTED_WINDOW_TYPE_TRANSPARENT = 2, /**< A transparent hole in the app surface. */
+    SDL_WEBOS_EXPORTED_WINDOW_TYPE_OPAQUE = 3       /**< An opaque region of the app surface. */
+} SDL_webOSExportedWindowType;
+
+/**
+ * Show or hide the webOS pointer.
+ *
+ * webOS draws the magic remote pointer itself, outside of the app surface, so
+ * this is separate from SDL's own cursor handling.
+ *
+ * \param visible true to show the pointer, false to hide it.
+ * \returns true on success or false on failure; call SDL_GetError() for more
+ *          information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSCursorVisibility(bool visible);
+
+/**
+ * Get the native resolution of the TV panel.
+ *
+ * This is the physical panel size, which is not necessarily the size of the
+ * surface the app is given.
+ *
+ * \param width a pointer filled in with the panel width, in pixels.
+ * \param height a pointer filled in with the panel height, in pixels.
+ * \returns true on success or false on failure; call SDL_GetError() for more
+ *          information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSGetPanelResolution(int *width, int *height);
+
+/**
+ * Get the refresh rate the TV panel is driven at.
+ *
+ * \param rate a pointer filled in with the refresh rate, in Hz.
+ * \returns true on success or false on failure; call SDL_GetError() for more
+ *          information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSGetRefreshRate(int *rate);
+
+/**
+ * Create an exported window.
+ *
+ * An exported window is a compositor surface the app owns but does not draw
+ * to, most often used to hand a region of the screen to the video pipeline.
+ *
+ * \param type the kind of surface to create.
+ * \returns the window ID of the new exported window, which stays valid until
+ *          SDL_webOSDestroyExportedWindow() is called on it, or NULL on
+ *          failure; call SDL_GetError() for more information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ *
+ * \sa SDL_webOSDestroyExportedWindow
+ */
+extern SDL_DECLSPEC const char * SDLCALL SDL_webOSCreateExportedWindow(SDL_webOSExportedWindowType type);
+
+/**
+ * Set the source and destination regions of an exported window.
+ *
+ * \param windowId the window ID returned by SDL_webOSCreateExportedWindow().
+ * \param src the region of the exported content to show, or NULL for all of
+ *            it.
+ * \param dst the region of the screen to show it in, or NULL for the whole
+ *            window.
+ * \returns true on success or false on failure; call SDL_GetError() for more
+ *          information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSSetExportedWindow(const char *windowId, SDL_Rect *src, SDL_Rect *dst);
+
+/**
+ * Set the crop region of an exported window.
+ *
+ * \param windowId the window ID returned by SDL_webOSCreateExportedWindow().
+ * \param org the full size of the exported content.
+ * \param src the region of that content to show.
+ * \param dst the region of the screen to show it in.
+ * \returns true on success or false on failure; call SDL_GetError() for more
+ *          information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSExportedSetCropRegion(const char *windowId, SDL_Rect *org, SDL_Rect *src, SDL_Rect *dst);
+
+/**
+ * Set a compositor property on an exported window.
+ *
+ * \param windowId the window ID returned by SDL_webOSCreateExportedWindow().
+ * \param name the name of the property.
+ * \param value the value to set it to.
+ * \returns true on success or false on failure; call SDL_GetError() for more
+ *          information.
+ *
+ * \since This function is available since SDL 3.4.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSExportedSetProperty(const char *windowId, const char *name, const char *value);
+
+/**
+ * Destroy an exported window.
+ *
+ * \param windowId the window ID returned by SDL_webOSCreateExportedWindow().
+ *
+ * \since This function is available since SDL 3.4.0.
+ *
+ * \sa SDL_webOSCreateExportedWindow
+ */
+extern SDL_DECLSPEC void SDLCALL SDL_webOSDestroyExportedWindow(const char *windowId);
+
+#endif /* SDL_PLATFORM_WEBOS */
+
 /* Ends C function definitions when using C++ */
 #ifdef __cplusplus
 }
