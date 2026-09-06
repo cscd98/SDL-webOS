@@ -46,12 +46,33 @@ bool Wayland_GLES_LoadLibrary(SDL_VideoDevice *_this, const char *path)
     if (!_this->gl_config.egl_platform) {
         _this->gl_config.egl_platform = EGL_PLATFORM_WAYLAND_KHR;
     }
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    if (_this->egl_data) {
+        // Kept alive by Wayland_GLES_UnloadLibrary(); the display is still initialized.
+        return true;
+    }
+#endif
     result = SDL_EGL_LoadLibrary(_this, path, (NativeDisplayType)data->display, _this->gl_config.egl_platform);
 
     Wayland_PumpEvents(_this);
     WAYLAND_wl_display_flush(data->display);
 
     return result;
+}
+
+void Wayland_GLES_UnloadLibrary(SDL_VideoDevice *_this)
+{
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* webOS's Mali EGL frees the private wl_event_queue it reads on in
+     * eglTerminate() without destroying the frame callbacks left attached to
+     * it, so the next thread to read the connection queues an event into freed
+     * memory. Keep the display initialized until Wayland_VideoCleanup(), by
+     * which point nothing reads events any more.
+     */
+    (void)_this;
+#else
+    SDL_EGL_UnloadLibrary(_this);
+#endif
 }
 
 SDL_GLContext Wayland_GLES_CreateContext(SDL_VideoDevice *_this, SDL_Window *window)

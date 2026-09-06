@@ -1612,6 +1612,11 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
 
     Wayland_FiniMouse(data);
 
+#if defined(SDL_VIDEO_DRIVER_WAYLAND_WEBOS) && defined(SDL_VIDEO_OPENGL_EGL)
+    // Deferred by Wayland_GLES_UnloadLibrary(); the cursor thread is gone now.
+    SDL_EGL_UnloadLibrary(_this);
+#endif
+
     if (data->pointer_constraints) {
         zwp_pointer_constraints_v1_destroy(data->pointer_constraints);
         data->pointer_constraints = NULL;

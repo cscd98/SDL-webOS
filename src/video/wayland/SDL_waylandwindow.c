@@ -3444,6 +3444,24 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
             }
         }
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+        /* The webOS role is assigned by hand in WebOS_AssignShellRole(), so it
+         * has to be released by hand as well; the shell surface outliving the
+         * window would leave the compositor sending state changes to a freed
+         * SDL_WindowData.
+         */
+        if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_CUSTOM) {
+            if (wind->shell_surface.webos.webos) {
+                wl_webos_shell_surface_destroy(wind->shell_surface.webos.webos);
+                wind->shell_surface.webos.webos = NULL;
+            }
+            if (wind->shell_surface.webos.wl) {
+                wl_shell_surface_destroy(wind->shell_surface.webos.wl);
+                wind->shell_surface.webos.wl = NULL;
+            }
+        }
+#endif
+
         if (!(window->flags & SDL_WINDOW_EXTERNAL)) {
             wl_surface_destroy(wind->surface);
         } else {
