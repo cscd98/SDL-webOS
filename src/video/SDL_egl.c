@@ -1293,7 +1293,8 @@ EGLSurface SDL_EGL_CreateSurface(SDL_VideoDevice *_this, SDL_Window *window, Nat
 
     int opaque_ext_idx = -1;
 
-#ifdef EGL_EXT_present_opaque
+// webOS 10+ reports EGL_EXT_present_opaque, but composition breaks if we use it.
+#if defined(EGL_EXT_present_opaque) && !defined(SDL_PLATFORM_WEBOS)
     if (SDL_EGL_HasExtension(_this, SDL_EGL_DISPLAY_EXTENSION, "EGL_EXT_present_opaque")) {
         opaque_ext_idx = attr;
         bool allow_transparent = false;
