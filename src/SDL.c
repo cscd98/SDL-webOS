@@ -885,6 +885,8 @@ bool SDL_IsTV(void)
 #elif defined(SDL_PLATFORM_IOS)
     extern bool SDL_IsAppleTV(void);
     return SDL_IsAppleTV();
+#elif defined(SDL_PLATFORM_WEBOS)
+    return true;
 #else
     return false;
 #endif
