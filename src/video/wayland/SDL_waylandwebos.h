@@ -31,6 +31,11 @@
 /* Attaches the webOS shell-surface listener and applies the surface properties
  * LG's compositor expects: the app id, the access policies that decide which
  * remote keys reach the app, and the cursor and window-class settings. */
+/* The access-policy and cursor hints are re-read from the live surface, so an
+ * app can take a remote key while it plays and hand it back in its menus. */
+extern void WaylandWebOS_InitHints(SDL_VideoDevice *_this);
+extern void WaylandWebOS_QuitHints(SDL_VideoDevice *_this);
+
 extern bool WaylandWebOS_SetupSurface(SDL_VideoDevice *_this, SDL_WindowData *data);
 
 #endif // SDL_VIDEO_DRIVER_WAYLAND_WEBOS

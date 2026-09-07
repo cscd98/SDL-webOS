@@ -51,6 +51,7 @@
 #include "webos-shell-client-protocol.h"
 #include "starfish-client-protocol.h"
 #include "webos-input-manager-client-protocol.h"
+#include "SDL_waylandwebos.h"
 #include "SDL_waylandwebos_abifix.h"
 #include "SDL_waylandwebos_osk.h"
 #include "SDL_waylandwebos_foreign.h"
@@ -1600,6 +1601,10 @@ bool Wayland_VideoInit(SDL_VideoDevice *_this)
 
     data->initializing = false;
 
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    WaylandWebOS_InitHints(_this);
+#endif
+
     return true;
 }
 
@@ -1712,6 +1717,7 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
     }
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    WaylandWebOS_QuitHints(_this);
     WaylandWebOS_QuitTextInput(data);
     WaylandWebOS_QuitForeign(data);
 

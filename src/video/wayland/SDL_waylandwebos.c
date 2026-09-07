@@ -101,11 +101,98 @@ static const struct wl_webos_shell_surface_listener webos_shell_surface_listener
     webos_shell_handle_state_about_to_change
 };
 
+/* The hints the compositor re-reads from a live surface. Each maps to one
+ * property, and each is written explicitly either way, so an app can hand a
+ * key back to the system as well as take it. */
+static const char *const webos_window_hints[] = {
+    SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_BACK,
+    SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_EXIT,
+    SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_HOME,
+    SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_GUIDE,
+    SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_META,
+    SDL_HINT_WEBOS_ACCESS_POLICY_RIBBON,
+    SDL_HINT_WEBOS_CURSOR_CALIBRATION_DISABLE,
+    SDL_HINT_WEBOS_CLOUDGAME_ACTIVE,
+    SDL_HINT_WEBOS_CURSOR_FREQUENCY
+};
+
+static void ApplyWindowHint(struct wl_webos_shell_surface *surface, const char *name)
+{
+    const char *value;
+
+    if (SDL_strcmp(name, SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_BACK) == 0) {
+        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_BACK",
+                                            SDL_GetHintBoolean(name, false) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_EXIT) == 0) {
+        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_EXIT",
+                                            SDL_GetHintBoolean(name, false) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_HOME) == 0) {
+        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_HOME",
+                                            SDL_GetHintBoolean(name, false) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_GUIDE) == 0) {
+        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_GUIDE",
+                                            SDL_GetHintBoolean(name, false) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_META) == 0) {
+        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_META",
+                                            SDL_GetHintBoolean(name, false) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_ACCESS_POLICY_RIBBON) == 0) {
+        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_RIBBON",
+                                            SDL_GetHintBoolean(name, true) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_CURSOR_CALIBRATION_DISABLE) == 0) {
+        wl_webos_shell_surface_set_property(surface, "restore_cursor_position",
+                                            SDL_GetHintBoolean(name, false) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_CLOUDGAME_ACTIVE) == 0) {
+        wl_webos_shell_surface_set_property(surface, "cloudgame_active",
+                                            SDL_GetHintBoolean(name, true) ? "true" : "false");
+    } else if (SDL_strcmp(name, SDL_HINT_WEBOS_CURSOR_FREQUENCY) == 0) {
+        /* No sensible way to say "back to the default rate", so a cleared or
+         * invalid hint leaves whatever the compositor already has. */
+        value = SDL_GetHint(name);
+        if (value && SDL_atoi(value) > 0) {
+            wl_webos_shell_surface_set_property(surface, "cursor_fps", value);
+        }
+    }
+}
+
+static void SDLCALL WindowHintCallback(void *userdata, const char *name, const char *oldValue, const char *newValue)
+{
+    SDL_VideoDevice *_this = (SDL_VideoDevice *)userdata;
+    SDL_Window *window;
+
+    for (window = _this->windows; window; window = window->next) {
+        SDL_WindowData *data = window->internal;
+
+        if (data && data->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_CUSTOM &&
+            data->shell_surface.webos.webos) {
+            ApplyWindowHint(data->shell_surface.webos.webos, name);
+        }
+    }
+}
+
+void WaylandWebOS_InitHints(SDL_VideoDevice *_this)
+{
+    int i;
+
+    for (i = 0; i < SDL_arraysize(webos_window_hints); ++i) {
+        SDL_AddHintCallback(webos_window_hints[i], WindowHintCallback, _this);
+    }
+}
+
+void WaylandWebOS_QuitHints(SDL_VideoDevice *_this)
+{
+    int i;
+
+    for (i = 0; i < SDL_arraysize(webos_window_hints); ++i) {
+        SDL_RemoveHintCallback(webos_window_hints[i], WindowHintCallback, _this);
+    }
+}
+
 bool WaylandWebOS_SetupSurface(SDL_VideoDevice *_this, SDL_WindowData *data)
 {
     struct wl_webos_shell_surface *surface = data->shell_surface.webos.webos;
     const char *appid = SDL_getenv("APPID");
     const char *hint;
+    int i;
 
     if (!surface) {
         return SDL_SetError("No webOS shell surface to set up");
@@ -118,37 +205,8 @@ bool WaylandWebOS_SetupSurface(SDL_VideoDevice *_this, SDL_WindowData *data)
     wl_webos_shell_surface_add_listener(surface, &webos_shell_surface_listener, data);
     wl_webos_shell_surface_set_property(surface, "appId", appid);
 
-    /* Each access policy hands one remote key to the app instead of letting the
-     * system act on it. */
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_BACK, false)) {
-        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_BACK", "true");
-    }
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_EXIT, false)) {
-        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_EXIT", "true");
-    }
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_HOME, false)) {
-        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_HOME", "true");
-    }
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_GUIDE, false)) {
-        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_GUIDE", "true");
-    }
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_ACCESS_POLICY_KEYS_META, false)) {
-        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_KEYS_META", "true");
-    }
-    if (!SDL_GetHintBoolean(SDL_HINT_WEBOS_ACCESS_POLICY_RIBBON, true)) {
-        wl_webos_shell_surface_set_property(surface, "_WEBOS_ACCESS_POLICY_RIBBON", "false");
-    }
-
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_CURSOR_CALIBRATION_DISABLE, false)) {
-        wl_webos_shell_surface_set_property(surface, "restore_cursor_position", "true");
-    }
-    if (SDL_GetHintBoolean(SDL_HINT_WEBOS_CLOUDGAME_ACTIVE, true)) {
-        wl_webos_shell_surface_set_property(surface, "cloudgame_active", "true");
-    }
-
-    hint = SDL_GetHint(SDL_HINT_WEBOS_CURSOR_FREQUENCY);
-    if (hint && SDL_atoi(hint) > 0) {
-        wl_webos_shell_surface_set_property(surface, "cursor_fps", hint);
+    for (i = 0; i < SDL_arraysize(webos_window_hints); ++i) {
+        ApplyWindowHint(surface, webos_window_hints[i]);
     }
 
     hint = SDL_GetHint(SDL_HINT_WEBOS_WINDOW_CLASS);
