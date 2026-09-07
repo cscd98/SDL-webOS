@@ -94,6 +94,7 @@ struct SDL_VideoData
     {
         struct wl_webos_foreign *foreign;
         struct SDL_WaylandExportedWindow *windows;
+        SDL_Mutex *lock;
     } webos_foreign;
 #endif
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;

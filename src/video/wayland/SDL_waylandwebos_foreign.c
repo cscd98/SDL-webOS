@@ -55,6 +55,8 @@ static const struct wl_webos_exported_listener webos_exported_listener = {
     exported_handle_window_id_assigned
 };
 
+/* The caller holds webos_foreign.lock, and keeps holding it for as long as it
+ * uses the entry - a concurrent destroy would free it and the proxy in it. */
 static SDL_WaylandExportedWindow *WaylandWebOS_FindExportedWindow(SDL_VideoData *display, const char *windowId)
 {
     SDL_WaylandExportedWindow *window;
@@ -112,13 +114,22 @@ static void WaylandWebOS_DestroyRegion(struct wl_region *region)
 
 void WaylandWebOS_DisplayInitForeign(SDL_VideoData *display, Uint32 id)
 {
+    display->webos_foreign.lock = SDL_CreateMutex();
+    if (!display->webos_foreign.lock) {
+        return;
+    }
+
     display->webos_foreign.foreign = wl_registry_bind(display->registry, id, &wl_webos_foreign_interface, 1);
 }
 
 void WaylandWebOS_QuitForeign(SDL_VideoData *display)
 {
-    SDL_WaylandExportedWindow *window = display->webos_foreign.windows;
+    SDL_Mutex *lock = display->webos_foreign.lock;
+    SDL_WaylandExportedWindow *window;
 
+    SDL_LockMutex(lock);
+
+    window = display->webos_foreign.windows;
     while (window) {
         SDL_WaylandExportedWindow *next = window->next;
 
@@ -132,6 +143,13 @@ void WaylandWebOS_QuitForeign(SDL_VideoData *display)
         wl_webos_foreign_destroy(display->webos_foreign.foreign);
         display->webos_foreign.foreign = NULL;
     }
+
+    /* Dropped before the unlock, so a call that arrives after this point finds
+     * no compositor support rather than a mutex that is already gone. */
+    display->webos_foreign.lock = NULL;
+
+    SDL_UnlockMutex(lock);
+    SDL_DestroyMutex(lock);
 }
 
 const char *WaylandWebOS_CreateExportedWindow(SDL_VideoDevice *_this, SDL_webOSExportedWindowType type)
@@ -203,8 +221,19 @@ const char *WaylandWebOS_CreateExportedWindow(SDL_VideoDevice *_this, SDL_webOSE
         }
     }
 
+    /* Nothing else can reach the entry before it goes on the list, so the wait
+     * above runs unlocked rather than holding off every other caller for a second. */
+    SDL_LockMutex(display->webos_foreign.lock);
+    if (!display->webos_foreign.foreign) {
+        SDL_UnlockMutex(display->webos_foreign.lock);
+        wl_webos_exported_destroy(exported_window->exported);
+        SDL_free(exported_window);
+        SDL_SetError("Failed creating exported window: the video device was torn down during creation");
+        return NULL;
+    }
     exported_window->next = display->webos_foreign.windows;
     display->webos_foreign.windows = exported_window;
+    SDL_UnlockMutex(display->webos_foreign.lock);
 
     return exported_window->window_id;
 }
@@ -213,32 +242,33 @@ bool WaylandWebOS_SetExportedWindow(SDL_VideoDevice *_this, const char *windowId
                                     const SDL_Rect *dst)
 {
     SDL_VideoData *display = _this->internal;
-    SDL_WaylandExportedWindow *window = WaylandWebOS_FindExportedWindow(display, windowId);
-    struct wl_region *src_region;
-    struct wl_region *dst_region;
+    SDL_WaylandExportedWindow *window;
     SDL_Rect whole;
+    bool result = false;
 
-    if (!window) {
-        return false;
-    }
-    if ((!src || !dst) && !WaylandWebOS_GetWholeWindowRect(window, &whole)) {
-        return false;
-    }
+    SDL_LockMutex(display->webos_foreign.lock);
 
-    src_region = WaylandWebOS_CreateRegion(display, src ? src : &whole);
-    dst_region = WaylandWebOS_CreateRegion(display, dst ? dst : &whole);
-    if (!src_region || !dst_region) {
+    window = WaylandWebOS_FindExportedWindow(display, windowId);
+    if (window && ((src && dst) || WaylandWebOS_GetWholeWindowRect(window, &whole))) {
+        struct wl_region *src_region = WaylandWebOS_CreateRegion(display, src ? src : &whole);
+        struct wl_region *dst_region = WaylandWebOS_CreateRegion(display, dst ? dst : &whole);
+
+        if (src_region && dst_region) {
+            wl_webos_exported_set_exported_window(window->exported, src_region, dst_region);
+            result = true;
+        } else {
+            SDL_SetError("Failed creating a region");
+        }
         WaylandWebOS_DestroyRegion(src_region);
         WaylandWebOS_DestroyRegion(dst_region);
-        return SDL_SetError("Failed creating a region");
     }
 
-    wl_webos_exported_set_exported_window(window->exported, src_region, dst_region);
-    wl_region_destroy(src_region);
-    wl_region_destroy(dst_region);
-    WAYLAND_wl_display_flush(display->display);
+    SDL_UnlockMutex(display->webos_foreign.lock);
 
-    return true;
+    if (result) {
+        WAYLAND_wl_display_flush(display->display);
+    }
+    return result;
 }
 
 bool WaylandWebOS_ExportedSetCropRegion(SDL_VideoDevice *_this, const char *windowId, const SDL_Rect *org,
@@ -246,36 +276,37 @@ bool WaylandWebOS_ExportedSetCropRegion(SDL_VideoDevice *_this, const char *wind
 {
     SDL_VideoData *display = _this->internal;
     SDL_WaylandExportedWindow *window;
-    struct wl_region *org_region;
-    struct wl_region *src_region;
-    struct wl_region *dst_region;
+    bool result = false;
 
     if (!org || !src || !dst) {
         return SDL_SetError("Invalid crop region");
     }
 
-    window = WaylandWebOS_FindExportedWindow(display, windowId);
-    if (!window) {
-        return false;
-    }
+    SDL_LockMutex(display->webos_foreign.lock);
 
-    org_region = WaylandWebOS_CreateRegion(display, org);
-    src_region = WaylandWebOS_CreateRegion(display, src);
-    dst_region = WaylandWebOS_CreateRegion(display, dst);
-    if (!org_region || !src_region || !dst_region) {
+    window = WaylandWebOS_FindExportedWindow(display, windowId);
+    if (window) {
+        struct wl_region *org_region = WaylandWebOS_CreateRegion(display, org);
+        struct wl_region *src_region = WaylandWebOS_CreateRegion(display, src);
+        struct wl_region *dst_region = WaylandWebOS_CreateRegion(display, dst);
+
+        if (org_region && src_region && dst_region) {
+            wl_webos_exported_set_crop_region(window->exported, org_region, src_region, dst_region);
+            result = true;
+        } else {
+            SDL_SetError("Failed creating a region");
+        }
         WaylandWebOS_DestroyRegion(org_region);
         WaylandWebOS_DestroyRegion(src_region);
         WaylandWebOS_DestroyRegion(dst_region);
-        return SDL_SetError("Failed creating a region");
     }
 
-    wl_webos_exported_set_crop_region(window->exported, org_region, src_region, dst_region);
-    wl_region_destroy(org_region);
-    wl_region_destroy(src_region);
-    wl_region_destroy(dst_region);
-    WAYLAND_wl_display_flush(display->display);
+    SDL_UnlockMutex(display->webos_foreign.lock);
 
-    return true;
+    if (result) {
+        WAYLAND_wl_display_flush(display->display);
+    }
+    return result;
 }
 
 bool WaylandWebOS_ExportedSetProperty(SDL_VideoDevice *_this, const char *windowId, const char *name,
@@ -283,6 +314,7 @@ bool WaylandWebOS_ExportedSetProperty(SDL_VideoDevice *_this, const char *window
 {
     SDL_VideoData *display = _this->internal;
     SDL_WaylandExportedWindow *window;
+    bool result = false;
 
     if (!name) {
         return SDL_SetError("Invalid property name");
@@ -291,36 +323,49 @@ bool WaylandWebOS_ExportedSetProperty(SDL_VideoDevice *_this, const char *window
         return SDL_SetError("Invalid property value");
     }
 
+    SDL_LockMutex(display->webos_foreign.lock);
+
     window = WaylandWebOS_FindExportedWindow(display, windowId);
-    if (!window) {
-        return false;
+    if (window) {
+        wl_webos_exported_set_property(window->exported, name, value);
+        result = true;
     }
 
-    wl_webos_exported_set_property(window->exported, name, value);
-    WAYLAND_wl_display_flush(display->display);
+    SDL_UnlockMutex(display->webos_foreign.lock);
 
-    return true;
+    if (result) {
+        WAYLAND_wl_display_flush(display->display);
+    }
+    return result;
 }
 
 bool WaylandWebOS_DestroyExportedWindow(SDL_VideoDevice *_this, const char *windowId)
 {
     SDL_VideoData *display = _this->internal;
-    SDL_WaylandExportedWindow *window = WaylandWebOS_FindExportedWindow(display, windowId);
-    SDL_WaylandExportedWindow **prev;
+    SDL_WaylandExportedWindow *window;
+    bool result = false;
 
-    if (!window) {
-        return false;
+    SDL_LockMutex(display->webos_foreign.lock);
+
+    window = WaylandWebOS_FindExportedWindow(display, windowId);
+    if (window) {
+        SDL_WaylandExportedWindow **prev;
+
+        for (prev = &display->webos_foreign.windows; *prev != window; prev = &(*prev)->next) {
+        }
+        *prev = window->next;
+
+        wl_webos_exported_destroy(window->exported);
+        SDL_free(window);
+        result = true;
     }
 
-    for (prev = &display->webos_foreign.windows; *prev != window; prev = &(*prev)->next) {
+    SDL_UnlockMutex(display->webos_foreign.lock);
+
+    if (result) {
+        WAYLAND_wl_display_flush(display->display);
     }
-    *prev = window->next;
-
-    wl_webos_exported_destroy(window->exported);
-    WAYLAND_wl_display_flush(display->display);
-    SDL_free(window);
-
-    return true;
+    return result;
 }
 
 #endif // SDL_VIDEO_DRIVER_WAYLAND_WEBOS
