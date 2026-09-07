@@ -396,6 +396,16 @@ add_sdl_test_executable(testthread NONINTERACTIVE THREADS NONINTERACTIVE_TIMEOUT
 add_sdl_test_executable(testiconv NEEDS_RESOURCES TESTUTILS SOURCES testiconv.c)
 add_sdl_test_executable(testime NEEDS_RESOURCES TESTUTILS SOURCES testime.c)
 add_sdl_test_executable(testkeys SOURCES testkeys.c)
+
+# Netlink uevent hotplug monitor. The mechanism is plain Linux netlink, but
+# both sources are behind SDL_PLATFORM_WEBOS, so unlike the SDL2 branch there
+# is nothing to build off webOS. testwebosuevent needs real hotplug activity
+# to conclude anything, so only the parser tests are non-interactive.
+if(WEBOS)
+    add_sdl_test_executable(testwebosuevent BUILD_DEPENDENT SOURCES testwebosuevent.c)
+    add_sdl_test_executable(testwebosuevent_parse BUILD_DEPENDENT NONINTERACTIVE SOURCES testwebosuevent_parse.c)
+endif()
+
 add_sdl_test_executable(testloadso SOURCES testloadso.c)
 add_sdl_test_executable(testlocale NONINTERACTIVE SOURCES testlocale.c)
 add_sdl_test_executable(testlock SOURCES testlock.c)
