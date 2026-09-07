@@ -2380,6 +2380,14 @@ static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_
         }
         xdg_activation_token_v1_commit(target_wind->activation_token);
     }
+#ifdef SDL_VIDEO_DRIVER_WAYLAND_WEBOS
+    /* webOS has no xdg-activation; asking the shell for fullscreen is what
+     * brings a backgrounded app back to the front. */
+    else if (target_wind->shell_surface.webos.webos) {
+        wl_webos_shell_surface_set_state(target_wind->shell_surface.webos.webos,
+                                         WL_WEBOS_SHELL_SURFACE_STATE_FULLSCREEN);
+    }
+#endif
 }
 
 void Wayland_RaiseWindow(SDL_VideoDevice *_this, SDL_Window *window)
