@@ -1,0 +1,43 @@
+name: 'Build (webOS)'
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "webOS (libhelpers: ${{ matrix.libhelper }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        libhelper: [ 'ON', 'OFF' ]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: 'Download webOS NDK'
+        uses: robinraju/release-downloader@v1.11
+        with:
+          repository: 'openlgtv/buildroot-nc4'
+          tag: 'webos-b17b4cc'
+          fileName: 'arm-webos-linux-gnueabi_sdk-buildroot.tar.gz'
+          extract: 'true'
+          out-file-path: '/tmp'
+
+      - name: 'Relocate webOS NDK'
+        working-directory: /tmp
+        run: ./arm-webos-linux-gnueabi_sdk-buildroot/relocate-sdk.sh
+
+      - name: 'Configure (CMake)'
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake \
+            -DCMAKE_BUILD_TYPE=Release -DWEBOS=ON -DSDL_TESTS=ON -DSDL_OFFSCREEN=OFF \
+            -DSDL_DISKAUDIO=OFF -DSDL_KMSDRM=OFF -DSDL_VENDOR_INFO="webOS Backport" \
+            -DSDL_WEBOS_HAVE_LIBHELPER=${{ matrix.libhelper }}
+
+      - name: 'Build (CMake)'
+        run: cmake --build build/ --config Release --verbose --parallel
