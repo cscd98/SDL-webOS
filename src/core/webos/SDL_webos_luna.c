@@ -25,27 +25,46 @@
 #include "SDL_webos_libs.h"
 #include "SDL_webos_luna.h"
 
-typedef struct SyncUserdata
+// Long enough that a busy bus is not cut off - a reply normally lands in a
+// couple of milliseconds - and short enough that a service which never answers
+// ends as an error instead of a hung process.
+#define LUNA_CALL_TIMEOUT_MS 5000
+
+typedef struct SyncCall
 {
+    HContext context;
     SDL_Mutex *mutex;
     SDL_Condition *cond;
     bool finished;
-    char **output;
-} SyncUserdata;
+    bool abandoned;
+    char *output;
+} SyncCall;
+
+static void destroySyncCall(SyncCall *call)
+{
+    SDL_DestroyCondition(call->cond);
+    SDL_DestroyMutex(call->mutex);
+    SDL_free(call->output);
+    SDL_free(call);
+}
 
 static int syncCallCallback(LSHandle *sh, LSMessage *reply, HContext *ctx)
 {
-    SyncUserdata *userdata = ctx->userdata;
+    SyncCall *call = ctx->userdata;
 
     (void)sh;
 
-    SDL_LockMutex(userdata->mutex);
-    userdata->finished = true;
-    if (userdata->output) {
-        *userdata->output = SDL_strdup(HELPERS_HLunaServiceMessage(reply));
+    SDL_LockMutex(call->mutex);
+    if (call->abandoned) {
+        // The caller gave up waiting, so this side owns the call now.
+        SDL_UnlockMutex(call->mutex);
+        destroySyncCall(call);
+        return 0;
     }
-    SDL_SignalCondition(userdata->cond);
-    SDL_UnlockMutex(userdata->mutex);
+    call->output = SDL_strdup(HELPERS_HLunaServiceMessage(reply));
+    call->finished = true;
+    SDL_SignalCondition(call->cond);
+    SDL_UnlockMutex(call->mutex);
     return 0;
 }
 
@@ -72,13 +91,17 @@ bool SDL_webOSLunaServiceJustCall(const char *uri, const char *payload, int pub)
     response_context->multiple = 0;
     response_context->pub = pub;
     response_context->callback = justCallCallback;
-    return HELPERS_HLunaServiceCall(uri, payload, response_context) == 0;
+    if (HELPERS_HLunaServiceCall(uri, payload, response_context) != 0) {
+        SDL_free(response_context);
+        return false;
+    }
+    return true;
 }
 
 bool SDL_webOSLunaServiceCallSync(const char *uri, const char *payload, int pub, char **output)
 {
-    SyncUserdata userdata;
-    HContext context;
+    SyncCall *call;
+    Uint64 deadline;
     int callRet;
 
     if (!HELPERS_HLunaServiceCall) {
@@ -88,31 +111,48 @@ bool SDL_webOSLunaServiceCallSync(const char *uri, const char *payload, int pub,
         return SDL_SetError("Disabled by SDL_WEBOS_DISABLE_LUNA_CALLS");
     }
 
-    SDL_zero(userdata);
-    userdata.mutex = SDL_CreateMutex();
-    userdata.cond = SDL_CreateCondition();
-    userdata.output = output;
+    // The reply arrives on a thread of libhelpers' own, and may arrive after
+    // this call has timed out, so the state it writes to cannot live on our
+    // stack.
+    call = SDL_calloc(1, sizeof(SyncCall));
+    if (call == NULL) {
+        return false;
+    }
+    call->mutex = SDL_CreateMutex();
+    call->cond = SDL_CreateCondition();
+    if (call->mutex == NULL || call->cond == NULL) {
+        destroySyncCall(call);
+        return false;
+    }
+    call->context.multiple = 0;
+    call->context.pub = pub ? 1 : 0;
+    call->context.callback = syncCallCallback;
+    call->context.userdata = call;
 
-    SDL_zero(context);
-    context.multiple = 0;
-    context.pub = pub ? 1 : 0;
-    context.callback = syncCallCallback;
-    context.userdata = &userdata;
-
-    if ((callRet = HELPERS_HLunaServiceCall(uri, payload, &context)) != 0) {
-        SDL_DestroyMutex(userdata.mutex);
-        SDL_DestroyCondition(userdata.cond);
+    if ((callRet = HELPERS_HLunaServiceCall(uri, payload, &call->context)) != 0) {
+        destroySyncCall(call);
         return SDL_SetError("Failed to call %s: (%d) %s", uri, callRet,
                             HELPERS_HGetError ? HELPERS_HGetError(callRet) : "unknown error");
     }
-    SDL_LockMutex(userdata.mutex);
-    while (!userdata.finished) {
-        SDL_WaitCondition(userdata.cond, userdata.mutex);
-    }
-    SDL_UnlockMutex(userdata.mutex);
 
-    SDL_DestroyMutex(userdata.mutex);
-    SDL_DestroyCondition(userdata.cond);
+    deadline = SDL_GetTicks() + LUNA_CALL_TIMEOUT_MS;
+    SDL_LockMutex(call->mutex);
+    while (!call->finished) {
+        const Uint64 now = SDL_GetTicks();
+        if (now >= deadline) {
+            call->abandoned = true;
+            SDL_UnlockMutex(call->mutex);
+            return SDL_SetError("Timed out waiting for a reply from %s", uri);
+        }
+        SDL_WaitConditionTimeout(call->cond, call->mutex, (Sint32)(deadline - now));
+    }
+    if (output != NULL) {
+        *output = call->output;
+        call->output = NULL;
+    }
+    SDL_UnlockMutex(call->mutex);
+
+    destroySyncCall(call);
     SDL_ClearError();
     return true;
 }
