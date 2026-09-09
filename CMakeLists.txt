@@ -523,6 +523,12 @@ if(SDL_STATIC)
   SDL_AddCommonCompilerFlags(SDL3-static)
   target_compile_definitions(SDL3-static PRIVATE "$<$<CONFIG:Debug>:DEBUG>")
   set_property(TARGET SDL3-static PROPERTY UNITY_BUILD OFF)
+  if(WEBOS)
+    # webOS apps ship shared objects of their own that link libSDL3.a, and the
+    # ARM linker rejects non-PIC code in a shared object outright
+    # (R_ARM_MOVW_ABS_NC) rather than merely warning as some arches do.
+    set_property(TARGET SDL3-static PROPERTY POSITION_INDEPENDENT_CODE TRUE)
+  endif()
   if ("c_std_99" IN_LIST CMAKE_C_COMPILE_FEATURES)
     target_compile_features(SDL3-static PRIVATE c_std_99)
   else()
