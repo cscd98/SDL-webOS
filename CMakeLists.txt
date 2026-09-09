@@ -216,6 +216,13 @@ set(SDL_RELOCATABLE_DEFAULT OFF)
 if(MSVC)
   set(SDL_RELOCATABLE_DEFAULT ON)
 endif()
+if(WEBOS)
+  # A webOS app ships SDL inside its own lib/ rather than installing to a
+  # sysroot, so an absolute prefix baked in at configure time is always wrong.
+  # It is worse than useless: the buildroot toolchain wrapper rejects the
+  # resulting -I/usr/local/include outright.
+  set(SDL_RELOCATABLE_DEFAULT ON)
+endif()
 
 set(SDL_SHARED_DEFAULT ON)
 set(SDL_STATIC_DEFAULT ON)
