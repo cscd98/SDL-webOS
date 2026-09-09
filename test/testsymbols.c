@@ -53,6 +53,17 @@ extern SDL_DECLSPEC void SDLCALL SDL_SetLinuxThreadPriority(void);
 extern SDL_DECLSPEC void SDLCALL SDL_SetLinuxThreadPriorityAndPolicy(void);
 #endif
 
+#if !defined(SDL_PLATFORM_WEBOS)
+extern SDL_DECLSPEC void SDLCALL SDL_webOSCursorVisibility(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSGetPanelResolution(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSGetRefreshRate(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSCreateExportedWindow(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSSetExportedWindow(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSExportedSetCropRegion(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSExportedSetProperty(void);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSDestroyExportedWindow(void);
+#endif
+
 #if !(defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_WINGDK))
 extern SDL_DECLSPEC void SDLCALL SDL_GetDXGIOutputInfo(void);
 extern SDL_DECLSPEC void SDLCALL SDL_GetDirect3D9AdapterIndex(void);
