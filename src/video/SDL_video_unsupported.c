@@ -107,3 +107,64 @@ void SDL_SetiOSEventPump(bool enabled)
 }
 #endif
 
+#ifndef SDL_PLATFORM_WEBOS
+
+bool SDL_webOSCursorVisibility(bool visible)
+{
+    (void)visible;
+    return SDL_Unsupported();
+}
+
+bool SDL_webOSGetPanelResolution(int *width, int *height)
+{
+    (void)width;
+    (void)height;
+    return SDL_Unsupported();
+}
+
+bool SDL_webOSGetRefreshRate(int *rate)
+{
+    (void)rate;
+    return SDL_Unsupported();
+}
+
+const char *SDL_webOSCreateExportedWindow(SDL_webOSExportedWindowType type)
+{
+    (void)type;
+    SDL_Unsupported();
+    return NULL;
+}
+
+bool SDL_webOSSetExportedWindow(const char *windowId, SDL_Rect *src, SDL_Rect *dst)
+{
+    (void)windowId;
+    (void)src;
+    (void)dst;
+    return SDL_Unsupported();
+}
+
+bool SDL_webOSExportedSetCropRegion(const char *windowId, SDL_Rect *org, SDL_Rect *src, SDL_Rect *dst)
+{
+    (void)windowId;
+    (void)org;
+    (void)src;
+    (void)dst;
+    return SDL_Unsupported();
+}
+
+bool SDL_webOSExportedSetProperty(const char *windowId, const char *name, const char *value)
+{
+    (void)windowId;
+    (void)name;
+    (void)value;
+    return SDL_Unsupported();
+}
+
+void SDL_webOSDestroyExportedWindow(const char *windowId)
+{
+    (void)windowId;
+    SDL_Unsupported();
+}
+
+#endif // !SDL_PLATFORM_WEBOS
+

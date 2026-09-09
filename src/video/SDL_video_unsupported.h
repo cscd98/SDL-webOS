@@ -59,3 +59,19 @@ typedef void (SDLCALL *SDL_iOSAnimationCallback)(void *userdata);
 extern SDL_DECLSPEC bool SDLCALL SDL_SetiOSAnimationCallback(SDL_Window *window, int interval, SDL_iOSAnimationCallback callback, void *callbackParam);
 extern SDL_DECLSPEC void SDLCALL SDL_SetiOSEventPump(bool enabled);
 #endif
+
+#if !defined(SDL_PLATFORM_WEBOS)
+
+/* The real enum only exists on webOS; the dynapi table still names the type. */
+typedef int SDL_webOSExportedWindowType;
+
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSCursorVisibility(bool visible);
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSGetPanelResolution(int *width, int *height);
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSGetRefreshRate(int *rate);
+extern SDL_DECLSPEC const char * SDLCALL SDL_webOSCreateExportedWindow(SDL_webOSExportedWindowType type);
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSSetExportedWindow(const char *windowId, SDL_Rect *src, SDL_Rect *dst);
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSExportedSetCropRegion(const char *windowId, SDL_Rect *org, SDL_Rect *src, SDL_Rect *dst);
+extern SDL_DECLSPEC bool SDLCALL SDL_webOSExportedSetProperty(const char *windowId, const char *name, const char *value);
+extern SDL_DECLSPEC void SDLCALL SDL_webOSDestroyExportedWindow(const char *windowId);
+
+#endif /* !SDL_PLATFORM_WEBOS */
