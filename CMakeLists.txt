@@ -128,6 +128,32 @@ list(APPEND CMAKE_REQUIRED_LINK_OPTIONS ${SDL_CHECK_REQUIRED_LINK_OPTIONS})
 # Get the platform
 SDL_DetectCMakePlatform()
 
+# webOS presents itself as Linux, so CMake's own platform detection cannot tell
+# the two apart. Key off the toolchain triple (arm-webos-linux-gnueabi)
+# instead. Without this, configuring with the webOS SDK but forgetting
+# -DWEBOS=ON silently produces a generic Linux SDL: no wayland-webos driver, no
+# __WEBOS__, none of the webOS public API, and it all builds and installs
+# cleanly.
+set(SDL_WEBOS_DETECTED OFF)
+foreach(_webos_hint IN ITEMS
+    "${CMAKE_C_COMPILER_TARGET}"
+    "${CMAKE_C_COMPILER}"
+    "${CMAKE_SYSROOT}"
+    "${CMAKE_LIBRARY_ARCHITECTURE}")
+  if(_webos_hint MATCHES "webos")
+    set(SDL_WEBOS_DETECTED ON)
+    break()
+  endif()
+endforeach()
+unset(_webos_hint)
+
+option(WEBOS "Build for LG webOS" ${SDL_WEBOS_DETECTED})
+
+if(SDL_WEBOS_DETECTED AND NOT WEBOS)
+  message(WARNING "A webOS toolchain was detected, but WEBOS is OFF. "
+                  "This build will have no webOS support at all.")
+endif()
+
 # Don't mistake macOS for unix
 if(UNIX AND NOT ANDROID AND NOT APPLE AND NOT RISCOS)
   set(UNIX_SYS ON)
