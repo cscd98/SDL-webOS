@@ -86,6 +86,14 @@ bool SDL_webOSRegisterApp(void)
     if (s_appRegistered) {
         return true;
     }
+    if (HELPERS_HLunaServiceCall == NULL) {
+        /* Without libhelpers there is nothing to register through. Treat it the
+         * same as the hint being off rather than reporting a failure. */
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "webOS: libhelpers is unavailable, skipping app registration");
+        s_appRegistered = true;
+        return true;
+    }
     if (SDL_GetHintBoolean(SDL_HINT_WEBOS_REGISTER_APP, true)) {
         const char *appId = SDL_getenv("APPID");
         if (appId == NULL) {

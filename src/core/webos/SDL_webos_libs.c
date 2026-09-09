@@ -45,22 +45,41 @@ static SDL_FunctionPointer WebOSGetSym(SDL_SharedObject *object, const char *nam
     return sym;
 }
 
-static bool LoadHelpers(void)
+static void UnloadHelpers(void)
+{
+#define SDL_HELPERS_SYM(rc, fn, params)     HELPERS_##fn = NULL;
+#define SDL_HELPERS_SYM_OPT(rc, fn, params) HELPERS_##fn = NULL;
+#include "SDL_webos_helpers_sym.h"
+    if (LibHelpersHandle != NULL) {
+        SDL_UnloadObject(LibHelpersHandle);
+    }
+    LibHelpersHandle = NULL;
+}
+
+/* libhelpers carries the luna service calls: app registration, the screensaver
+ * and power-state subscriptions, and the app-state broadcast the media
+ * pipeline listens on. Every caller checks its entry points for NULL, so a set
+ * without it loses those features rather than failing to start SDL at all. */
+static void LoadHelpers(void)
 {
     bool valid = true;
     LibHelpersHandle = SDL_LoadObject("libhelpers.so.2");
     if (LibHelpersHandle == NULL) {
-        SDL_webOSUnloadLibraries();
-        return SDL_SetError("Failed to load libhelpers");
+        SDL_LogWarn(SDL_LOG_CATEGORY_SYSTEM,
+                    "webOS: libhelpers.so.2 is unavailable (%s); luna service calls are disabled",
+                    SDL_GetError());
+        // Not an error condition any more, so don't leave one set behind us.
+        SDL_ClearError();
+        return;
     }
 #define SDL_HELPERS_SYM(rc, fn, params)     HELPERS_##fn = (SDL_DYNHELPERSFN_##fn)WebOSGetSym(LibHelpersHandle, #fn, true, &valid);
 #define SDL_HELPERS_SYM_OPT(rc, fn, params) HELPERS_##fn = (SDL_DYNHELPERSFN_##fn)WebOSGetSym(LibHelpersHandle, #fn, false, &valid);
 #include "SDL_webos_helpers_sym.h"
     if (!valid) {
-        SDL_webOSUnloadLibraries();
-        return SDL_SetError("Failed to load libhelpers");
+        SDL_LogWarn(SDL_LOG_CATEGORY_SYSTEM,
+                    "webOS: libhelpers.so.2 is missing required symbols; luna service calls are disabled");
+        UnloadHelpers();
     }
-    return true;
 }
 
 static bool LoadPbnjson(void)
@@ -83,9 +102,8 @@ static bool LoadPbnjson(void)
 
 bool SDL_webOSLoadLibraries(void)
 {
-    if (!LoadHelpers()) {
-        return false;
-    }
+    // Never fatal: SDL runs without it, minus the luna-backed features.
+    LoadHelpers();
     if (!LoadPbnjson()) {
         return false;
     }
@@ -97,13 +115,7 @@ bool SDL_webOSLoadLibraries(void)
 
 void SDL_webOSUnloadLibraries(void)
 {
-#define SDL_HELPERS_SYM(rc, fn, params)     HELPERS_##fn = NULL;
-#define SDL_HELPERS_SYM_OPT(rc, fn, params) HELPERS_##fn = NULL;
-#include "SDL_webos_helpers_sym.h"
-    if (LibHelpersHandle != NULL) {
-        SDL_UnloadObject(LibHelpersHandle);
-    }
-    LibHelpersHandle = NULL;
+    UnloadHelpers();
 
 #define SDL_PBNJSON_SYM(rc, fn, params)     PBNJSON_##fn = NULL;
 #define SDL_PBNJSON_SYM_OPT(rc, fn, params) PBNJSON_##fn = NULL;

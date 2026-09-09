@@ -40,7 +40,9 @@ static void webos_shell_handle_state(void *data, struct wl_webos_shell_surface *
 
     if (state == WL_WEBOS_SHELL_SURFACE_STATE_MINIMIZED) {
 #ifdef SDL_WEBOS_HAVE_LIBHELPER
-        HELPERS_HProcessAppState(3, NULL);
+        if (HELPERS_HProcessAppState != NULL) {
+            HELPERS_HProcessAppState(3, NULL);
+        }
 #endif
         SDL_SendWindowEvent(d->sdlwindow, SDL_EVENT_WINDOW_MINIMIZED, 0, 0);
         SDL_SendAppEvent(SDL_EVENT_WILL_ENTER_BACKGROUND);
@@ -52,7 +54,9 @@ static void webos_shell_handle_state(void *data, struct wl_webos_shell_surface *
             SDL_SendAppEvent(SDL_EVENT_WILL_ENTER_FOREGROUND);
             SDL_SendAppEvent(SDL_EVENT_DID_ENTER_FOREGROUND);
 #ifdef SDL_WEBOS_HAVE_LIBHELPER
-            HELPERS_HProcessAppState(0, NULL);
+            if (HELPERS_HProcessAppState != NULL) {
+                HELPERS_HProcessAppState(0, NULL);
+            }
 #endif
         }
     }
@@ -89,7 +93,9 @@ static void webos_shell_handle_state_about_to_change(void *data, struct wl_webos
      * before it is backgrounded. */
     SDL_SendAppEvent(SDL_EVENT_WILL_ENTER_BACKGROUND);
 #ifdef SDL_WEBOS_HAVE_LIBHELPER
-    HELPERS_HProcessAppState(1, NULL);
+    if (HELPERS_HProcessAppState != NULL) {
+        HELPERS_HProcessAppState(1, NULL);
+    }
 #endif
 }
 
