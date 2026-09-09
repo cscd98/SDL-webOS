@@ -1,6 +1,14 @@
 name: 'Build (webOS)'
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '*'
+  pull_request:
+  release:
+    types: [ published ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -41,3 +49,69 @@ jobs:
 
       - name: 'Build (CMake)'
         run: cmake --build build/ --config Release --verbose --parallel
+
+      # Run on every build, not just releases: an install step that only ever
+      # runs at tag time is one that has already broken by the time it matters.
+      - name: 'Install (CMake)'
+        run: |
+          cmake --install build/ --prefix dist
+          find dist -type f | sort
+
+      # The same consumption checks generic.yml runs for every other platform.
+      # They only compile and link, so they need no device, exactly as on the
+      # other cross-compiled targets that never execute what they build.
+      - name: 'Verify CMake configuration files'
+        run: |
+          cmake -S cmake/test -B cmake_test_build \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTEST_SHARED=ON \
+            -DTEST_STATIC=OFF \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/dist"
+          cmake --build cmake_test_build --verbose --config Release
+
+      - name: 'Verify sdl3.pc'
+        run: |
+          sudo apt-get install -y pkg-config
+          export CC=/tmp/arm-webos-linux-gnueabi_sdk-buildroot/bin/arm-webos-linux-gnueabi-gcc
+          export PKG_CONFIG_PATH="${{ github.workspace }}/dist/lib/pkgconfig"
+          cmake/test/test_pkgconfig.sh
+
+      # libhelpers is dlopened, so the OFF leg exists to keep that code path
+      # compiling, not to ship. Only the ON build is released.
+      - name: 'Package'
+        if: github.event_name == 'release' && matrix.libhelper == 'ON'
+        shell: bash
+        run: |
+          # PACKAGE_VERSION is the upstream library version, and is identical
+          # for every webOS respin of a given base, so the webOS patch number
+          # can only come from the tag. Cross-check the two, so a tag cut
+          # against the wrong base cannot ship under a misleading name.
+          lib_version=$(sed -nE 's/^set\(PACKAGE_VERSION "([^"]+)"\)/\1/p' dist/lib/cmake/SDL3/SDL3ConfigVersion.cmake)
+          if [ -z "${lib_version}" ]; then
+            echo "could not determine the SDL version from the install tree" >&2
+            exit 1
+          fi
+          version=${TAG_NAME#release-}
+          case "${version}" in
+            "${lib_version}" | "${lib_version}"-*) ;;
+            *)
+              echo "release tag ${TAG_NAME} does not match library version ${lib_version}" >&2
+              exit 1
+              ;;
+          esac
+          tar -czf "SDL3-${version}.tar.gz" -C dist .
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - name: 'Release'
+        if: github.event_name == 'release' && matrix.libhelper == 'ON'
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.release.tag_name }}
+          allowUpdates: true
+          omitNameDuringUpdate: true
+          omitBody: true
+          omitPrereleaseDuringUpdate: true
+          artifacts: 'SDL3-*.tar.gz'
