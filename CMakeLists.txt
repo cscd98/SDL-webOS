@@ -1978,6 +1978,19 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
     endif()
 
     CheckLibUDev()
+
+    # webOS needs libudev despite enumerating devices itself: the webOS hidraw
+    # backend (src/hidapi/webos/hid.c) resolves every node it finds through
+    # udev_device_new_from_devnum(), and the netlink uevent hotplug monitor is
+    # only compiled when SDL_USE_LIBUDEV is set. Without it the hidapi build
+    # fails for an unrelated-looking reason, and joystick hotplug quietly falls
+    # back to polling with no diagnostic at all.
+    if(WEBOS AND (SDL_JOYSTICK OR SDL_HIDAPI) AND NOT (HAVE_LIBUDEV_H AND HAVE_LINUX_INPUT_H))
+      message(FATAL_ERROR
+        "webOS requires libudev for joystick and HIDAPI support, "
+        "but libudev.h or linux/input.h was not found.")
+    endif()
+
     check_include_file("sys/inotify.h" HAVE_SYS_INOTIFY_H)
     check_symbol_exists(inotify_init "sys/inotify.h" HAVE_INOTIFY_INIT)
     check_symbol_exists(inotify_init1 "sys/inotify.h" HAVE_INOTIFY_INIT1)
