@@ -300,9 +300,13 @@ if(SDL_FRAMEWORK)
   set(SDL_STATIC_AVAILABLE FALSE)
 endif()
 
-if(UNIX AND NOT ANDROID AND NOT RISCOS AND NOT SDL_FRAMEWORK)
+if(UNIX AND NOT ANDROID AND NOT RISCOS AND NOT SDL_FRAMEWORK AND NOT WEBOS)
   set(SDL_RPATH_DEFAULT ON)
 else()
+  # webOS: an rpath of ${libdir} is resolved when the consumer links, so it
+  # names the machine SDL was built on, not the TV. An app bundles SDL in its
+  # own lib/ and wants $ORIGIN/lib, which only the app knows. Emitting nothing
+  # leaves that to the app instead of baking in a path that cannot be right.
   set(SDL_RPATH_DEFAULT OFF)
 endif()
 
